@@ -1,7 +1,7 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "GameJamAnchor/Public/Anchor.h"
+#include "GameJamAnchor/Public/Characters/AnchorBase.h"
 
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -17,12 +17,12 @@
 
 
 // Sets default values
-AAnchor::AAnchor()
+AAnchorBase::AAnchorBase()
 {
     //暂时放开，方便蓝图后续使用
 	PrimaryActorTick.bCanEverTick = true;
 	
-	GetMesh()->bReceivesDecals = false;
+	//GetMesh()->bReceivesDecals = false;
 	
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
 	
@@ -44,7 +44,7 @@ AAnchor::AAnchor()
 
 }
 
-void AAnchor::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+void AAnchorBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
@@ -71,17 +71,17 @@ void AAnchor::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 	if (InputData->MoveAction)
 	{
 		// ETriggerEvent::Triggered 每帧触发（用于持续输入如摇杆/WASD）
-		EnhancedInput->BindAction(InputData->MoveAction, ETriggerEvent::Triggered,this, &AAnchor::DoMove);
+		EnhancedInput->BindAction(InputData->MoveAction, ETriggerEvent::Triggered,this, &AAnchorBase::DoMove);
 	}
 
 	if (InputData->SprintAction)
 	{
-		EnhancedInput->BindAction(InputData->SprintAction, ETriggerEvent::Triggered,this, &AAnchor::DoSprint);
+		EnhancedInput->BindAction(InputData->SprintAction, ETriggerEvent::Triggered,this, &AAnchorBase::DoSprint);
 	}	
 	
 }
 
-void AAnchor::BeginPlay()
+void AAnchorBase::BeginPlay()
 {
 	Super::BeginPlay();
 	APlayerController* PC = Cast<APlayerController>(GetController());
@@ -92,7 +92,7 @@ void AAnchor::BeginPlay()
 	
 }
 
-void AAnchor::DoMove(const FInputActionValue& InputActionValue)
+void AAnchorBase::DoMove(const FInputActionValue& InputActionValue)
 {
 	const FVector2D Movement = InputActionValue.Get<FVector2D>();
 	
@@ -118,7 +118,7 @@ void AAnchor::DoMove(const FInputActionValue& InputActionValue)
 	}
 }
 
-void AAnchor::DoSprint(const FInputActionValue& InputActionValue)
+void AAnchorBase::DoSprint(const FInputActionValue& InputActionValue)
 {
 }
 
