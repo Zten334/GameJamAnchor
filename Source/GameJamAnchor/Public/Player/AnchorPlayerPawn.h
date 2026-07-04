@@ -18,7 +18,6 @@ struct FInputActionValue;
 class UInputData;
 class USpringArmComponent;
 class UCameraComponent;
-class UCableComponent;
 UCLASS(Blueprintable)
 class GAMEJAMANCHOR_API AAnchorPlayerPawn : public ACharacter
 {
@@ -43,24 +42,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Input")
 	TObjectPtr<UInputData> InputData;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rope")
-	TObjectPtr<UCableComponent> RopeCable;
 
-	/** 绳子顶端的世界坐标。若为零向量，BeginPlay 时自动设为角色上方 500 单位。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rope")
-	FVector RopeTopWorldLocation = FVector::ZeroVector;
-
-	/** 绳子顶端在世界空间中的固定位置（每帧更新 EndLocation 以维持此位置不动）。 */
-	FVector FixedRopeTopWorldPos;
-
-	/** 绳子物理段数，越多越平滑。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rope")
-	int32 RopeSegments = 16;
-
-	/** 绳子粗细。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rope")
-	float RopeWidth = 5.0f;
-	
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="NormalSpeed")
 	float MaxSpeed;
 	

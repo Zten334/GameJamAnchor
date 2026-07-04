@@ -12,7 +12,6 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
-#include "CableComponent.h"
 #include "TimerManager.h"
 #include "GameJamAnchor/Public/Player/Input/InputData.h"
 
@@ -49,18 +48,6 @@ AAnchorPlayerPawn::AAnchorPlayerPawn(const FObjectInitializer& ObjectInitializer
 	SprintCoolDownTime = 2.5f;
 	SprintDurationTime = 0.5f;
 	canSprint = true;
-
-	RopeCable = CreateDefaultSubobject<UCableComponent>(TEXT("RopeCable"));
-	RopeCable->SetupAttachment(RootComponent);
-	RopeCable->SetRelativeLocation(FVector(0.0f, 0.0f, 80.0f));  // 绳子起点在角色头顶
-	RopeCable->NumSegments = 4;                                   // 减少段数，降低物理抖动
-	RopeCable->CableWidth = RopeWidth;
-	RopeCable->SolverIterations = 16;
-	RopeCable->bEnableStiffness = true;
-	RopeCable->SubstepTime = 0.01f;
-	RopeCable->CableForce = FVector(0.0f, 0.0f, 0.0f);           // 无外力（无重力）
-	RopeCable->SetVisibility(true);
-
 }
 
 void AAnchorPlayerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -116,15 +103,11 @@ void AAnchorPlayerPawn::BeginPlay()
 	Super::BeginPlay();
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC) return;
-
-	RopeCable->EndLocation = FVector(0.0f, 0.0f, 500.0f);
-
 }
 
 void AAnchorPlayerPawn::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
 
 	//UE_LOG(LogTemp, Warning, TEXT("%f"),GetVelocity().Length());
 	if (isHanging)
