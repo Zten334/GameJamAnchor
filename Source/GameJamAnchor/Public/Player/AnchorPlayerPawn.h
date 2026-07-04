@@ -41,15 +41,30 @@ protected:
 protected:
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Input")
 	TObjectPtr<UInputData> InputData;
-
-	UPROPERTY(EditDefaultsOnly,BlueprintReadWrite,Category="Movement")
+	
+	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="NormalSpeed")
 	float MaxSpeed;
+	
+	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Sprint")
+	float SprintSpeed;
+	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Sprint")
+	float SprintDurationTime;
+	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Sprint")
+	float SprintCoolDownTime;
+	
 #pragma region InputResponse
 	void DoMove(const FInputActionValue& InputActionValue);
 	void DoSprint(const FInputActionValue& InputActionValue);
+	void DoStruggle(const FInputActionValue& InputActionValue);
+	void EndSprint();
+	void ResetSprint();
+//暂时不需要
+	void DoAcceleration(const FInputActionValue& InputActionValue);
+	void DoDecelation(const FInputActionValue& InputActionValue);
 
 #pragma endregion
 	
+#pragma region VelocityResponse	
 	UFUNCTION(BlueprintCallable)
 	void OnHit();
 	
@@ -58,7 +73,12 @@ protected:
 	
 	UFUNCTION(BlueprintCallable)
 	void OnTwine(float QUEValue);
+
+#pragma endregion
 private:
 	float QTETime;
-
+	bool isSprinting;
+	bool canSprint ;
+	
+	
 };

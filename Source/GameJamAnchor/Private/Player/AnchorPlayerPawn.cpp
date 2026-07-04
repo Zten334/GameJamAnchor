@@ -3,14 +3,16 @@
 
 #include "GameJamAnchor/Public/Player/AnchorPlayerPawn.h"
 
+#include "AssetDefinitionAssetInfo.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "HLSLMathAliases.h"
 #include "InputActionValue.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
-
+#include "TimerManager.h"
 #include "GameJamAnchor/Public/Player/Input/InputData.h"
 
 #include "Blueprint/UserWidget.h"
@@ -21,7 +23,7 @@ AAnchorPlayerPawn::AAnchorPlayerPawn(const FObjectInitializer& ObjectInitializer
 	: Super(ObjectInitializer)
 {
     //暂时放开，方便蓝图后续使用
-	PrimaryActorTick.bCanEverTick = ture;
+	PrimaryActorTick.bCanEverTick = true;
 	
 	GetMesh()->bReceivesDecals = false;
 	
@@ -40,7 +42,11 @@ AAnchorPlayerPawn::AAnchorPlayerPawn(const FObjectInitializer& ObjectInitializer
 	GetCharacterMovement() -> BrakingDecelerationWalking = 2000.f;
 	GetCharacterMovement() -> BrakingDecelerationFalling = 1500.f;
 	
-	
+	MaxSpeed = 60.f;
+	SprintSpeed = 100.f;
+	SprintCoolDownTime = 2.5f;
+	SprintDurationTime = 0.5f;
+	canSprint = true;
 	
 
 }
@@ -87,7 +93,8 @@ void AAnchorPlayerPawn::BeginPlay()
 	Super::BeginPlay();
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC) return;
-
+	
+	
 	// 开放鼠标光标
 	//PC->SetShowMouseCursor(true);
 	
@@ -96,6 +103,7 @@ void AAnchorPlayerPawn::BeginPlay()
 void AAnchorPlayerPawn::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	//UE_LOG(LogTemp, Warning, TEXT("%f"),GetVelocity().Length());
 	if (QTETime > 0.0f)
 	{
 		const float TwineForce = 0.5f; 
@@ -112,13 +120,20 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 		QTETime -= DeltaTime;
 	}
 	
+	else if (isSprinting)
+	{
+		FVector FinalDirection = FVector(0,0,-1);
+		const float SprintForce = 3.f; 
+		AddMovementInput(FinalDirection, SprintForce);
+	}
+	
 }
 
 void AAnchorPlayerPawn::DoMove(const FInputActionValue& InputActionValue)
 {
 	const FVector2D Movement = InputActionValue.Get<FVector2D>();
 	
-	//UE_LOG(LogTemp, Warning, TEXT("Moving!"));
+	UE_LOG(LogTemp, Warning, TEXT("%s"),*Movement.ToString());
 	if (!Controller || Movement.IsNearlyZero())
 	{
 		return;
@@ -130,7 +145,7 @@ void AAnchorPlayerPawn::DoMove(const FInputActionValue& InputActionValue)
 	{
 		//UE_LOG(LogTemp, Warning, TEXT("Climbing!"));
 		const FVector ForwardDirection = FVector(0,0,1.0f);
-		UE_LOG(LogTemp, Warning, TEXT("%s"),*ForwardDirection.ToString());
+		//UE_LOG(LogTemp, Warning, TEXT("%s"),*ForwardDirection.ToString());
 		AddMovementInput(ForwardDirection, Movement.Y);
 	}
 	if (Movement.X != 0.f)
@@ -141,6 +156,71 @@ void AAnchorPlayerPawn::DoMove(const FInputActionValue& InputActionValue)
 }
 
 void AAnchorPlayerPawn::DoSprint(const FInputActionValue& InputActionValue)
+{
+	
+    //先弄个简单的，只要速度大于最大速度，就直接判定正在加速中
+	if (!canSprint){
+		return;
+	}
+	canSprint = false;
+	isSprinting = true;
+	UE_LOG(LogTemp, Warning, TEXT("开始冲刺"));
+	
+	
+	GetCharacterMovement()->MaxFlySpeed = SprintSpeed;
+	//FVector SprintDirection = GetVelocity().IsNearlyZero() ? FVector::DownVector : FVector(0,0, abs(GetVelocity().GetSafeNormal().Z));
+	
+	//LaunchCharacter(SprintDirection * SprintSpeed, false, false);
+	
+	//GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+	FTimerHandle SprintEndHandle;
+	FTimerHandle SprintResetHandle;
+	
+	// 6. 【新增】设置冲刺持续时间计时器（时间到后恢复速度上限）
+	GetWorldTimerManager().SetTimer(
+		SprintEndHandle,
+		this,
+		&AAnchorPlayerPawn::EndSprint,
+		SprintDurationTime,
+		false
+	);
+	
+	GetWorldTimerManager().SetTimer(
+		SprintResetHandle,
+		this,
+		&AAnchorPlayerPawn::ResetSprint,
+		SprintCoolDownTime,
+		false
+);
+
+	
+}
+
+void AAnchorPlayerPawn::DoStruggle(const FInputActionValue& InputActionValue)
+{
+	//减少QTE时间
+	QTETime -= 0.1f;
+	QTETime =  FMath::Max(0.0f, QTETime);
+}
+
+void AAnchorPlayerPawn::EndSprint()
+{
+	UE_LOG(LogTemp, Warning, TEXT("停止冲刺,%s"),*GetActorLocation().ToString());
+	GetCharacterMovement()->MaxFlySpeed = 60.f;
+	isSprinting = false;
+}
+
+void AAnchorPlayerPawn::ResetSprint()
+{
+	UE_LOG(LogTemp, Warning, TEXT("可以再次冲刺,%s"),*GetActorLocation().ToString());
+	canSprint = true;
+}
+
+void AAnchorPlayerPawn::DoAcceleration(const FInputActionValue& InputActionValue)
+{
+}
+
+void AAnchorPlayerPawn::DoDecelation(const FInputActionValue& InputActionValue)
 {
 }
 
@@ -170,7 +250,7 @@ void AAnchorPlayerPawn::OnWind(FVector2D Direction)
 
 void AAnchorPlayerPawn::OnTwine(float QUEValue)
 {
-	
+	QTETime += QUEValue;
 }
 
 
