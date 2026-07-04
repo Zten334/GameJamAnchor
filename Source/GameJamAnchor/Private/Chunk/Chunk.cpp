@@ -42,6 +42,20 @@ void AChunk::SyncScrollSpeed(float NewScrollSpeed)
 	}
 }
 
+void AChunk::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+
+	for (AObstacle* Obstacle : SpawnedObstacles)
+	{
+		if (Obstacle && Obstacle->bDestroyWithOwnerChunk)
+		{
+			Obstacle->Destroy();
+		}
+	}
+	SpawnedObstacles.Empty();
+}
+
 void AChunk::SpawnObstacles()
 {
 	int32 SpawnedCount = 0;
@@ -64,9 +78,27 @@ void AChunk::SpawnObstacles()
 
 		NewObstacle->ScrollSpeed = ScrollSpeed;
 		NewObstacle->InitialX = SpawnLocation.X;
-		NewObstacle->bDynamic = Config.bDynamic;
-		NewObstacle->SwayAmplitude = Config.SwayAmplitude;
-		NewObstacle->SwaySpeed = Config.SwaySpeed;
+		if (Config.bOverrideMovementSettings)
+		{
+			NewObstacle->bDynamic = Config.bDynamic;
+			NewObstacle->bOneWayMovement = Config.bOneWayMovement;
+			NewObstacle->OneWaySpeed = Config.OneWaySpeed;
+			NewObstacle->bWanderInRadius = Config.bWanderInRadius;
+			NewObstacle->WanderRadius = Config.WanderRadius;
+			NewObstacle->WanderSpeed = Config.WanderSpeed;
+			NewObstacle->WanderTurnRate = Config.WanderTurnRate;
+			NewObstacle->SwayAmplitude = Config.SwayAmplitude;
+			NewObstacle->SwaySpeed = Config.SwaySpeed;
+		}
+		NewObstacle->SetActorRotation(Config.RelativeRotation);
+		NewObstacle->bMirrorX = Config.bMirrorX;
+		NewObstacle->RelativeScale3D = Config.RelativeScale3D;
+		NewObstacle->ApplyVisualConfig();
+		if (Config.Flipbook)
+		{
+			NewObstacle->Flipbook = Config.Flipbook;
+			UE_LOG(LogTemp, Log, TEXT("Chunk %s assigned Flipbook %s to obstacle %s."), *GetName(), *Config.Flipbook->GetName(), *NewObstacle->GetName());
+		}
 		SpawnedObstacles.Add(NewObstacle);
 		++SpawnedCount;
 	}

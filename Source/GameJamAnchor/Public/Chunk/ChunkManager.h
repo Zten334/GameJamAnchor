@@ -6,10 +6,31 @@
 #include "GameFramework/Actor.h"
 #include "ChunkManager.generated.h"
 
+class ABackground;
+class AChunk;
+
+/**
+ * 背景阶段配置。
+ * 当“当前正在游玩的 Chunk”（即屏幕最下方仍在显示的最小编号 Chunk）达到 StartChunkIndex 时，切换到对应背景。
+ */
+USTRUCT(BlueprintType)
+struct FBackgroundPhaseConfig
+{
+	GENERATED_BODY()
+
+	/** 从第几个正在游玩的 Chunk 开始切换到这个背景（包含该 Chunk）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Background", meta = (ToolTip = "从第几个正在游玩的 Chunk 开始切换到这个背景。当前游玩的 Chunk 指屏幕最下方仍在显示的最小编号 Chunk。填 0 表示从开局就使用。"))
+	int32 StartChunkIndex = 0;
+
+	/** 该阶段使用的背景蓝图类。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Background", meta = (ToolTip = "该阶段要生成的背景蓝图类，例如 BP_Background_ShallowSea。"))
+	TSubclassOf<class ABackground> BackgroundClass;
+};
+
 /**
  * Chunk 管理器：控制 320 高关卡段的生成、上移、销毁。
  * 向上移动模拟锚向下落；出屏后销毁，下方持续补充新 Chunk。
- * 支持多种普通 Chunk 模板循环，以及一个终点 Chunk。
+ * 支持固定前置 Chunk 序列（教学关）、多种普通 Chunk 模板循环、终点 Chunk，以及按阶段切换背景。
  */
 UCLASS(Blueprintable)
 class GAMEJAMANCHOR_API AChunkManager : public AActor
@@ -37,6 +58,10 @@ protected:
 
 	bool bIsScrolling = true;
 
+	/** 教学关/引导阶段使用的固定 Chunk 序列。按数组顺序生成，耗尽后才进入随机生成。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Chunk", meta = (ToolTip = "教学关或引导阶段使用的固定 Chunk 序列。会按数组顺序依次生成，全部用完之后才会使用 ChunkClasses 随机生成。"))
+	TArray<TSubclassOf<class AChunk>> FixedIntroChunkClasses;
+
 	/** 单一 Chunk 模板（兼容旧用法）。如果 ChunkClasses 为空，会回退使用此项。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Chunk", meta = (ToolTip = "单一 Chunk 模板。当 ChunkClasses 数组为空时，管理器会使用此项生成所有普通 Chunk。"))
 	TSubclassOf<class AChunk> ChunkClass;
@@ -52,6 +77,10 @@ protected:
 	/** 在生成多少个普通 Chunk 后生成终点 Chunk。<= 0 表示无限循环。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Chunk", meta = (ToolTip = "生成多少个普通 Chunk 后生成终点 Chunk。例如填 20，表示第 20 个普通 Chunk 之后生成终点 Chunk；填 -1 表示无限循环。"))
 	int32 TerminationChunkIndex = -1;
+
+	/** 按阶段切换背景。当“当前正在游玩的 Chunk”达到配置值时，生成对应的背景蓝图。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Background", meta = (ToolTip = "按阶段切换背景。当前游玩的 Chunk 指屏幕最下方仍在显示的最小编号 Chunk。例如 StartChunkIndex=5 表示第 5 个 Chunk 滚动到屏幕底部时切换背景。"))
+	TArray<FBackgroundPhaseConfig> BackgroundPhases;
 
 	/** Chunk 上移速度（世界单位/秒）。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Chunk", meta = (ToolTip = "场景整体向上滚动的速度（世界单位/秒）。所有 Chunk 和障碍会同步此速度。"))
@@ -91,7 +120,20 @@ protected:
 	void RecycleChunks();
 	void SpawnNewChunksIfNeeded();
 
-	TSubclassOf<AChunk> SelectNextChunkClass() const;
+	TSubclassOf<AChunk> SelectNextChunkClass();
 	float GetDefaultLeadingGap(TSubclassOf<AChunk> InChunkClass) const;
 	float GetDefaultTrailingGap(TSubclassOf<AChunk> InChunkClass) const;
+
+	/** 检查并切换当前背景阶段。 */
+	void UpdateBackgroundPhase();
+
+	/** 固定前置序列的下一个索引。 */
+	int32 FixedIntroChunkIndex = 0;
+
+	/** 当前背景阶段索引。 */
+	int32 CurrentBackgroundPhaseIndex = INDEX_NONE;
+
+	/** 当前生成的背景 Actor。 */
+	UPROPERTY()
+	TObjectPtr<class ABackground> CurrentBackgroundActor = nullptr;
 };

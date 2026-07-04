@@ -10,14 +10,14 @@ AGameJamAnchorGameMode::AGameJamAnchorGameMode(const FObjectInitializer& ObjectI
 {
 	// 当前使用占位 Pawn，方便相机与输入系统工作。
 	// 后续由另一位程序替换为真正的玩家 Anchor Pawn（在 .uproject/DefaultGame.ini 或蓝图 GameMode 中覆盖）。
-	DefaultPawnClass = AAAnchorPlayerPawn::StaticClass();
+	DefaultPawnClass = AAnchorPlayerPawn::StaticClass();
 }
 
 void AGameJamAnchorGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
 
-	if (AAAnchorCamera* AnchorCamera = FindAnchorCamera())
+	if (AAnchorCamera* AnchorCamera = FindAnchorCamera())
 	{
 		NewPlayer->SetViewTargetWithBlend(AnchorCamera, 0.0f);
 	}
@@ -29,14 +29,25 @@ void AGameJamAnchorGameMode::ReportAnchorPlayerOutOfBounds()
 	OnAnchorPlayerOutOfBounds.Broadcast();
 }
 
-AAAnchorCamera* AGameJamAnchorGameMode::FindAnchorCamera() const
+void AGameJamAnchorGameMode::ReportPlayerHitObstacle(AActor* Hitter, FName EffectTag)
+{
+	if (!Hitter)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("GameMode: Player hit obstacle %s with effect %s."), *Hitter->GetName(), *EffectTag.ToString());
+	OnPlayerHitObstacle.Broadcast(Hitter, EffectTag);
+}
+
+AAnchorCamera* AGameJamAnchorGameMode::FindAnchorCamera() const
 {
 	TArray<AActor*> FoundCameras;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AAAnchorCamera::StaticClass(), FoundCameras);
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AAnchorCamera::StaticClass(), FoundCameras);
 
 	if (FoundCameras.Num() > 0)
 	{
-		return Cast<AAAnchorCamera>(FoundCameras[0]);
+		return Cast<AAnchorCamera>(FoundCameras[0]);
 	}
 
 	return nullptr;

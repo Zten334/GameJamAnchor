@@ -2,6 +2,7 @@
 
 #include "Chunk/ChunkManager.h"
 #include "Chunk/Chunk.h"
+#include "Background/Background.h"
 #include "Framework/GameJamAnchorGameMode.h"
 #include "Engine/World.h"
 
@@ -35,6 +36,7 @@ void AChunkManager::Tick(float DeltaTime)
 	UpdateChunkPositions(DeltaTime);
 	RecycleChunks();
 	SpawnNewChunksIfNeeded();
+	UpdateBackgroundPhase();
 }
 
 void AChunkManager::OnPlayerOutOfBounds()
@@ -47,10 +49,10 @@ void AChunkManager::OnPlayerOutOfBounds()
 void AChunkManager::SpawnInitialChunks()
 {
 	float CurrentCenterZ = ScreenBottomZ + (ChunkHeight / 2.0f);
-	TSubclassOf<AChunk> NextClass = SelectNextChunkClass();
 
 	for (int32 i = 0; i < InitialChunkCount; ++i)
 	{
+		TSubclassOf<AChunk> NextClass = SelectNextChunkClass();
 		if (!NextClass)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("ChunkManager: No ChunkClass or ChunkClasses configured."));
@@ -63,13 +65,19 @@ void AChunkManager::SpawnInitialChunks()
 			break;
 		}
 
-		TSubclassOf<AChunk> FollowingClass = SelectNextChunkClass();
-		if (FollowingClass)
+		if (i == InitialChunkCount - 1)
 		{
-			const float ExtraGap = GetDefaultTrailingGap(NextClass) + GetDefaultLeadingGap(FollowingClass);
-			CurrentCenterZ -= (ChunkSpacing + ExtraGap);
+			break;
 		}
-		NextClass = FollowingClass;
+
+		TSubclassOf<AChunk> FollowingClass = SelectNextChunkClass();
+		if (!FollowingClass)
+		{
+			break;
+		}
+
+		const float ExtraGap = GetDefaultTrailingGap(NextClass) + GetDefaultLeadingGap(FollowingClass);
+		CurrentCenterZ -= (ChunkSpacing + ExtraGap);
 	}
 }
 
@@ -92,8 +100,11 @@ void AChunkManager::SpawnChunkAtCenterZ(float CenterZ, TSubclassOf<AChunk> Class
 	NewChunk->ChunkHeight = ChunkHeight;
 	NewChunk->ChunkWidth = ChunkWidth;
 	NewChunk->ScrollSpeed = ScrollSpeed;
+	NewChunk->ChunkIndex = SpawnedChunkCount;
 	ActiveChunks.Add(NewChunk);
 	++SpawnedChunkCount;
+
+	UpdateBackgroundPhase();
 
 	if (TerminationChunkClass && ClassToSpawn == TerminationChunkClass)
 	{
@@ -187,8 +198,13 @@ void AChunkManager::SpawnNewChunksIfNeeded()
 	}
 }
 
-TSubclassOf<AChunk> AChunkManager::SelectNextChunkClass() const
+TSubclassOf<AChunk> AChunkManager::SelectNextChunkClass()
 {
+	if (FixedIntroChunkIndex < FixedIntroChunkClasses.Num())
+	{
+		return FixedIntroChunkClasses[FixedIntroChunkIndex++];
+	}
+
 	if (TerminationChunkClass && TerminationChunkIndex > 0 && SpawnedChunkCount >= TerminationChunkIndex)
 	{
 		return TerminationChunkClass;
@@ -200,6 +216,68 @@ TSubclassOf<AChunk> AChunkManager::SelectNextChunkClass() const
 	}
 
 	return ChunkClass;
+}
+
+void AChunkManager::UpdateBackgroundPhase()
+{
+	if (BackgroundPhases.Num() == 0)
+	{
+		return;
+	}
+
+	AChunk* CurrentChunk = nullptr;
+	for (AChunk* Chunk : ActiveChunks)
+	{
+		if (Chunk && (!CurrentChunk || Chunk->GetActorLocation().Z < CurrentChunk->GetActorLocation().Z))
+		{
+			CurrentChunk = Chunk;
+		}
+	}
+
+	if (!CurrentChunk)
+	{
+		return;
+	}
+
+	const int32 CurrentChunkIndex = CurrentChunk->ChunkIndex;
+
+	int32 BestIndex = INDEX_NONE;
+	int32 BestStart = INT_MIN;
+	for (int32 i = 0; i < BackgroundPhases.Num(); ++i)
+	{
+		const FBackgroundPhaseConfig& Phase = BackgroundPhases[i];
+		if (Phase.StartChunkIndex <= CurrentChunkIndex && Phase.StartChunkIndex > BestStart)
+		{
+			BestStart = Phase.StartChunkIndex;
+			BestIndex = i;
+		}
+	}
+
+	if (BestIndex == INDEX_NONE || BestIndex == CurrentBackgroundPhaseIndex)
+	{
+		return;
+	}
+
+	CurrentBackgroundPhaseIndex = BestIndex;
+	const FBackgroundPhaseConfig& Phase = BackgroundPhases[BestIndex];
+
+	if (CurrentBackgroundActor)
+	{
+		CurrentBackgroundActor->Destroy();
+		CurrentBackgroundActor = nullptr;
+	}
+
+	if (Phase.BackgroundClass)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		CurrentBackgroundActor = GetWorld()->SpawnActor<ABackground>(Phase.BackgroundClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+		UE_LOG(LogTemp, Log, TEXT("ChunkManager: switched to background phase %d at playing chunk #%d."), BestIndex, CurrentChunkIndex);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ChunkManager: background phase %d has no BackgroundClass assigned."), BestIndex);
+	}
 }
 
 float AChunkManager::GetDefaultLeadingGap(TSubclassOf<AChunk> InChunkClass) const

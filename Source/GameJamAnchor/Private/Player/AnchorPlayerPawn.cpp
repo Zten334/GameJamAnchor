@@ -3,7 +3,7 @@
 #include "Player/AnchorPlayerPawn.h"
 #include "PaperSpriteComponent.h"
 
-AAAnchorPlayerPawn::AAAnchorPlayerPawn(const FObjectInitializer& ObjectInitializer)
+AAnchorPlayerPawn::AAnchorPlayerPawn(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	PrimaryActorTick.bCanEverTick = true;

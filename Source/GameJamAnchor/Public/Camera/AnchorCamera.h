@@ -11,12 +11,12 @@
  * 不跟随玩家，由 GameMode 在玩家加入后设置为 ViewTarget。
  */
 UCLASS(Blueprintable)
-class GAMEJAMANCHOR_API AAAnchorCamera : public ACameraActor
+class GAMEJAMANCHOR_API AAnchorCamera : public ACameraActor
 {
 	GENERATED_BODY()
 
 public:
-	AAAnchorCamera(const FObjectInitializer& ObjectInitializer);
+	AAnchorCamera(const FObjectInitializer& ObjectInitializer);
 
 protected:
 	/** 逻辑视口宽度（世界单位）。默认 180，对应 180×320 像素画风的宽。 */
