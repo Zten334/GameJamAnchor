@@ -122,6 +122,31 @@ void AAnchorBase::DoSprint(const FInputActionValue& InputActionValue)
 {
 }
 
+void AAnchorBase::OnHit()
+{
+	int type = 0;
+	switch (type)
+	{
+	case 0:
+		
+		break;
+		default:
+		break;
+	}
+}
+
+void AAnchorBase::OnWind(FVector2D Direction)
+{
+	if (Direction.IsNearlyZero())
+	{
+		return;
+	}
+	const float WindForce = 0.5f; 
+	const FVector FinalDirection = FVector(Direction.X,0,Direction.Y);
+	AddMovementInput(FinalDirection, WindForce);
+}
+
+
 
 
 

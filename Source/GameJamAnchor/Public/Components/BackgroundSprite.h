@@ -17,12 +17,24 @@ public:
 	UBackgroundSprite();
 
 protected:
+	UPROPERTY(EditAnywhere,BlueprintReadOnly)
+	float OffsetValue;
 	UPROPERTY(BlueprintReadOnly)
-	TObjectPtr<AAnchor> OwningPlayer;
+	TObjectPtr<AActor> OwningPlayer;
+	UPROPERTY(BlueprintReadOnly)
+	float OffsetY;
 	
 	virtual void BeginPlay() override;
 
 public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
 	                           FActorComponentTickFunction* ThisTickFunction) override;
+
+protected:
+	UFUNCTION(BlueprintCallable)
+	void MatchOffset();
+
 };
+
+
+	

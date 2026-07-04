@@ -44,4 +44,9 @@ protected:
 
 #pragma endregion
 	
+	UFUNCTION(BlueprintCallable)
+	void OnHit();
+	
+	UFUNCTION(BlueprintCallable)
+	void OnWind(FVector2D Direction);
 };
