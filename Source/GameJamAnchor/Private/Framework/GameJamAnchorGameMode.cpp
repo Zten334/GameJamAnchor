@@ -10,7 +10,7 @@ AGameJamAnchorGameMode::AGameJamAnchorGameMode(const FObjectInitializer& ObjectI
 {
 	// 当前使用占位 Pawn，方便相机与输入系统工作。
 	// 后续由另一位程序替换为真正的玩家 Anchor Pawn（在 .uproject/DefaultGame.ini 或蓝图 GameMode 中覆盖）。
-	DefaultPawnClass = AAAnchorPlayerPawn::StaticClass();
+	DefaultPawnClass = AAnchorPlayerPawn::StaticClass();
 }
 
 void AGameJamAnchorGameMode::PostLogin(APlayerController* NewPlayer)
