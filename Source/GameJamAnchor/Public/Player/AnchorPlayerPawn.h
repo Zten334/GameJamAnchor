@@ -50,6 +50,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rope")
 	FVector RopeTopWorldLocation = FVector::ZeroVector;
 
+	/** 绳子顶端在世界空间中的固定位置（每帧更新 EndLocation 以维持此位置不动）。 */
+	FVector FixedRopeTopWorldPos;
+
 	/** 绳子物理段数，越多越平滑。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rope")
 	int32 RopeSegments = 16;
@@ -74,8 +77,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Swing")
 	float MaxSwingAngle = 45.0f;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Swing")
-	float SwingInterpSpeed = 15.0f;
 	
 #pragma region InputResponse
 	void DoMove(const FInputActionValue& InputActionValue);
@@ -114,19 +115,24 @@ protected:
 	void OnWind(FVector2D Direction);
 	
 	UFUNCTION(BlueprintCallable)
-	void OnTwine(float QUEValue);
+	void OnTwine(float QUEValue,AActor* TwinActor);
 
 #pragma endregion
+public:
+	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly)
+	float QTETime;
+	
 private:
 	FVector VelocityBeforeHanged;
-	
-	float QTETime;
 	bool isHanging;
 	bool isSprinting;
 	bool canSprint ;
-
 	
-	float PendulumStartTime = 0.0f;
+	UPROPERTY()
+	TObjectPtr<AActor> FollowTargetActor;
+	
+	float CurrentSwingAngle = 45.0f;
+	float SwingDir = -1.0f;
 	
 	
 	

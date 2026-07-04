@@ -32,7 +32,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SprintArrow")
 	float MaxRotation = 90.0f;
-	
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SprintArrow")
+	float RotationOffset = 0.0f;
 
+private:
+	float CachedRadius = -1.0f;
 };

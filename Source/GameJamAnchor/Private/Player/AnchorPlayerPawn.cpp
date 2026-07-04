@@ -52,13 +52,13 @@ AAnchorPlayerPawn::AAnchorPlayerPawn(const FObjectInitializer& ObjectInitializer
 
 	RopeCable = CreateDefaultSubobject<UCableComponent>(TEXT("RopeCable"));
 	RopeCable->SetupAttachment(RootComponent);
-	RopeCable->SetAttachEndToComponent(nullptr);            // 尾端不用组件绑定，手动设世界坐标
-	RopeCable->NumSegments = RopeSegments;
+	RopeCable->SetRelativeLocation(FVector(0.0f, 0.0f, 80.0f));  // 绳子起点在角色头顶
+	RopeCable->NumSegments = 4;                                   // 减少段数，降低物理抖动
 	RopeCable->CableWidth = RopeWidth;
-	RopeCable->SolverIterations = 8;
+	RopeCable->SolverIterations = 16;
 	RopeCable->bEnableStiffness = true;
-	RopeCable->SubstepTime = 0.02f;
-	RopeCable->CableForce = FVector(0.0f, 0.0f, 0.0f);     // 重力由 GravityScale 控制
+	RopeCable->SubstepTime = 0.01f;
+	RopeCable->CableForce = FVector(0.0f, 0.0f, 0.0f);           // 无外力（无重力）
 	RopeCable->SetVisibility(true);
 
 }
@@ -117,11 +117,7 @@ void AAnchorPlayerPawn::BeginPlay()
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC) return;
 
-	if (RopeTopWorldLocation.IsNearlyZero())
-	{
-		RopeTopWorldLocation = GetActorLocation() + FVector(0.0f, 0.0f, 500.0f);
-	}
-	RopeCable->EndLocation = GetActorTransform().InverseTransformPosition(RopeTopWorldLocation);
+	RopeCable->EndLocation = FVector(0.0f, 0.0f, 500.0f);
 
 }
 
@@ -129,8 +125,6 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// 保持绳子顶端固定在世界空间
-	RopeCable->EndLocation = GetActorTransform().InverseTransformPosition(RopeTopWorldLocation);
 
 	//UE_LOG(LogTemp, Warning, TEXT("%f"),GetVelocity().Length());
 	if (isHanging)
@@ -139,7 +133,14 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 	}
 	else if (QTETime > 0.0f)
 	{
-		const float TwineForce = 0.5f; 
+		if (!FollowTargetActor)
+		{
+			return;
+		}
+		SetActorLocation(FVector(FollowTargetActor->GetActorLocation().X,0.f,FollowTargetActor->GetActorLocation().Z));
+		QTETime -= DeltaTime;
+		/*
+		const float TwineForce = 0.5f;
 		FVector FinalDirection = FVector(0,0,1);
 		if (GetVelocity().X > 0.f)
 		{
@@ -150,12 +151,13 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 			FinalDirection.X = 1.0f;
 		}
 		AddMovementInput(FinalDirection, TwineForce);
-		QTETime -= DeltaTime;
+		
+		*/
 	}
 	
 	else if (isSprinting)
 	{
-		FVector FinalDirection = FVector(0,0,-1);
+		FVector FinalDirection = FVector(CurrentSprintDirection.X,0,-CurrentSprintDirection.Z);
 		const float SprintForce = 3.f; 
 		AddMovementInput(FinalDirection, SprintForce);
 	}
@@ -243,23 +245,32 @@ void AAnchorPlayerPawn::DoSprint(const FInputActionValue& InputActionValue)
 void AAnchorPlayerPawn::DoSprintStarted(const FInputActionValue& InputActionValue)
 {
 	bIsAiming = true;
-	PendulumStartTime = GetWorld()->GetTimeSeconds();
-	CurrentSprintDirection = FVector(0.707f, 0.0f, 0.707f);   // 315°
+	CurrentSwingAngle = 45.0f;
+	SwingDir = -1.0f;
 }
 
 void AAnchorPlayerPawn::DoSprintOnGoing(const FInputActionValue& InputActionValue)
 {
 	if (!bIsAiming) { return; }
 
-	float Elapsed = GetWorld()->GetTimeSeconds() - PendulumStartTime;
-	float Phase = Elapsed * SwingSpeed - UE_PI / 2.0f;
-	float SwingAngle = MaxSwingAngle * FMath::Sin(Phase);
-	float Rad = FMath::DegreesToRadians(SwingAngle);
-	FVector TargetDir(-FMath::Sin(Rad), 0.0f, FMath::Cos(Rad));
-
 	float DeltaTime = GetWorld()->GetDeltaSeconds();
-	CurrentSprintDirection = FMath::VInterpTo(CurrentSprintDirection, TargetDir, DeltaTime, SwingInterpSpeed);
-	CurrentSprintDirection.Normalize();
+	CurrentSwingAngle += SwingDir * SwingSpeed * DeltaTime;
+
+	if (CurrentSwingAngle >= MaxSwingAngle)
+	{
+		CurrentSwingAngle = MaxSwingAngle;
+		SwingDir = -1.0f;
+	}
+	else if (CurrentSwingAngle <= -MaxSwingAngle)
+	{
+		CurrentSwingAngle = -MaxSwingAngle;
+		SwingDir = 1.0f;
+	}
+
+	FVector BaseDir(0.0f, 0.0f, 1.0f);
+	CurrentSprintDirection = BaseDir.RotateAngleAxis(CurrentSwingAngle, FVector(0.0f, 1.0f, 0.0f));
+	UE_LOG(LogTemp, Warning, TEXT("%s"),*CurrentSprintDirection.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("%f"),CurrentSwingAngle);
 }
 
 void AAnchorPlayerPawn::DoStruggle(const FInputActionValue& InputActionValue)
@@ -350,8 +361,9 @@ void AAnchorPlayerPawn::OnWind(FVector2D Direction)
 	AddMovementInput(FinalDirection, WindForce);
 }
 
-void AAnchorPlayerPawn::OnTwine(float QUEValue)
+void AAnchorPlayerPawn::OnTwine(float QUEValue,AActor* TwinActor)
 {
+	FollowTargetActor = TwinActor;
 	QTETime += QUEValue;
 }
 

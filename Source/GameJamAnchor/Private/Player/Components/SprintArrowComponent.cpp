@@ -21,7 +21,15 @@ void USprintArrowComponent::UpdateRotation(FVector Velocity, FVector CenterPoint
 	float MinRad = FMath::DegreesToRadians(MinRotation);
 	float MaxRad = FMath::DegreesToRadians(MaxRotation);
 
-	float R = GetRelativeLocation().Length();
+	if (CachedRadius < 0.0f)
+	{
+		CachedRadius = GetRelativeLocation().Length();
+		if (CachedRadius < 1.0f)
+		{
+			CachedRadius = 80.0f;    // 兜底默认半径
+		}
+	}
+	float R = CachedRadius;
 
 	float CosVal = FMath::Cos(Angle);
 	// 防止 Velocity 朝下时 Cos 为负，箭头翻到玩家上方
@@ -37,9 +45,10 @@ void USprintArrowComponent::UpdateRotation(FVector Velocity, FVector CenterPoint
 		-R * CosVal
 	));
 
-	// 自身旋转：绕 Y 轴指向速度方向
-	float ArrowDeg = FMath::RadiansToDegrees(Angle);
-	SetRelativeRotation(FRotator(ArrowDeg, 0.0f, 0.0f));
+	// 自身旋转：对齐径向朝外（Sprite 默认向下，Angle 度直接绕 Y 转）
+	SetRelativeRotation(FRotator(FMath::RadiansToDegrees(Angle), 0.0f, 0.0f));
+
+
 }
 
 
