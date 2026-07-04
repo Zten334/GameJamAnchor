@@ -6,7 +6,7 @@
 #include "Components/ActorComponent.h"
 #include "SprintComponent.generated.h"
 
-
+//Unused
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class GAMEJAMANCHOR_API USprintComponent : public UActorComponent
 {

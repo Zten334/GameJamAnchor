@@ -12,10 +12,12 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "CableComponent.h"
 #include "TimerManager.h"
 #include "GameJamAnchor/Public/Player/Input/InputData.h"
 
 #include "Blueprint/UserWidget.h"
+#include "DataWrappers/ChaosVDParticleDataWrapper.h"
 
 
 // Sets default values
@@ -47,7 +49,17 @@ AAnchorPlayerPawn::AAnchorPlayerPawn(const FObjectInitializer& ObjectInitializer
 	SprintCoolDownTime = 2.5f;
 	SprintDurationTime = 0.5f;
 	canSprint = true;
-	
+
+	RopeCable = CreateDefaultSubobject<UCableComponent>(TEXT("RopeCable"));
+	RopeCable->SetupAttachment(RootComponent);
+	RopeCable->SetAttachEndToComponent(nullptr);            // 尾端不用组件绑定，手动设世界坐标
+	RopeCable->NumSegments = RopeSegments;
+	RopeCable->CableWidth = RopeWidth;
+	RopeCable->SolverIterations = 8;
+	RopeCable->bEnableStiffness = true;
+	RopeCable->SubstepTime = 0.02f;
+	RopeCable->CableForce = FVector(0.0f, 0.0f, 0.0f);     // 重力由 GravityScale 控制
+	RopeCable->SetVisibility(true);
 
 }
 
@@ -83,9 +95,20 @@ void AAnchorPlayerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 	if (InputData->SprintAction)
 	{
+		EnhancedInput->BindAction(InputData->SprintAction, ETriggerEvent::Started,this, &AAnchorPlayerPawn::DoSprintStarted);
+		EnhancedInput->BindAction(InputData->SprintAction, ETriggerEvent::Ongoing,this, &AAnchorPlayerPawn::DoSprintOnGoing);
 		EnhancedInput->BindAction(InputData->SprintAction, ETriggerEvent::Triggered,this, &AAnchorPlayerPawn::DoSprint);
 	}	
 	
+	if (InputData->StruggleAction)
+	{
+		EnhancedInput->BindAction(InputData->StruggleAction, ETriggerEvent::Triggered,this, &AAnchorPlayerPawn::DoStruggle);
+	}	
+	
+	if (InputData->BreakAwayAction)
+	{
+		EnhancedInput->BindAction(InputData->BreakAwayAction, ETriggerEvent::Triggered,this, &AAnchorPlayerPawn::OnBreakAway);
+	}	
 }
 
 void AAnchorPlayerPawn::BeginPlay()
@@ -93,18 +116,28 @@ void AAnchorPlayerPawn::BeginPlay()
 	Super::BeginPlay();
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC) return;
-	
-	
-	// 开放鼠标光标
-	//PC->SetShowMouseCursor(true);
-	
+
+	if (RopeTopWorldLocation.IsNearlyZero())
+	{
+		RopeTopWorldLocation = GetActorLocation() + FVector(0.0f, 0.0f, 500.0f);
+	}
+	RopeCable->EndLocation = GetActorTransform().InverseTransformPosition(RopeTopWorldLocation);
+
 }
 
 void AAnchorPlayerPawn::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	// 保持绳子顶端固定在世界空间
+	RopeCable->EndLocation = GetActorTransform().InverseTransformPosition(RopeTopWorldLocation);
+
 	//UE_LOG(LogTemp, Warning, TEXT("%f"),GetVelocity().Length());
-	if (QTETime > 0.0f)
+	if (isHanging)
+	{
+		GetCharacterMovement() -> MaxFlySpeed = 0.f;
+	}
+	else if (QTETime > 0.0f)
 	{
 		const float TwineForce = 0.5f; 
 		FVector FinalDirection = FVector(0,0,1);
@@ -127,6 +160,17 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 		AddMovementInput(FinalDirection, SprintForce);
 	}
 	
+	else if (FMath::IsNearlyZero(GetVelocity().Z))
+	{
+		if (GetActorLocation().Z > 1.f)
+		{
+			AddMovementInput(FVector(0,0,-1),1);
+		}
+		else if(GetActorLocation().Z < -1.f)
+		{
+			AddMovementInput(FVector(0,0,1),1);
+		}
+	}
 }
 
 void AAnchorPlayerPawn::DoMove(const FInputActionValue& InputActionValue)
@@ -196,11 +240,40 @@ void AAnchorPlayerPawn::DoSprint(const FInputActionValue& InputActionValue)
 	
 }
 
+void AAnchorPlayerPawn::DoSprintStarted(const FInputActionValue& InputActionValue)
+{
+	bIsAiming = true;
+	PendulumStartTime = GetWorld()->GetTimeSeconds();
+	CurrentSprintDirection = FVector(0.707f, 0.0f, 0.707f);   // 315°
+}
+
+void AAnchorPlayerPawn::DoSprintOnGoing(const FInputActionValue& InputActionValue)
+{
+	if (!bIsAiming) { return; }
+
+	float Elapsed = GetWorld()->GetTimeSeconds() - PendulumStartTime;
+	float Phase = Elapsed * SwingSpeed - UE_PI / 2.0f;
+	float SwingAngle = MaxSwingAngle * FMath::Sin(Phase);
+	float Rad = FMath::DegreesToRadians(SwingAngle);
+	FVector TargetDir(-FMath::Sin(Rad), 0.0f, FMath::Cos(Rad));
+
+	float DeltaTime = GetWorld()->GetDeltaSeconds();
+	CurrentSprintDirection = FMath::VInterpTo(CurrentSprintDirection, TargetDir, DeltaTime, SwingInterpSpeed);
+	CurrentSprintDirection.Normalize();
+}
+
 void AAnchorPlayerPawn::DoStruggle(const FInputActionValue& InputActionValue)
 {
 	//减少QTE时间
 	QTETime -= 0.1f;
 	QTETime =  FMath::Max(0.0f, QTETime);
+}
+
+void AAnchorPlayerPawn::OnBreakAway()
+{
+	isHanging = false;
+	GetCharacterMovement()->MaxFlySpeed = MaxSpeed;
+	GetCharacterMovement()->Velocity = FVector(-VelocityBeforeHanged.X,0,VelocityBeforeHanged.Z);
 }
 
 void AAnchorPlayerPawn::EndSprint()
@@ -235,6 +308,35 @@ void AAnchorPlayerPawn::OnHit()
 		default:
 		break;
 	}
+}
+
+void AAnchorPlayerPawn::OnDeceleration(const float TimeValue,const float DecelerationRate)
+{
+	GetCharacterMovement()->MaxFlySpeed = MaxSpeed * DecelerationRate;
+	FTimerHandle DecelerationEndHandle;
+	
+	// 6. 【新增】设置冲刺持续时间计时器（时间到后恢复速度上限）
+	GetWorldTimerManager().SetTimer(
+		DecelerationEndHandle,
+		this,
+		&AAnchorPlayerPawn::EndDeceleration,
+		TimeValue,
+		false
+	);
+	
+}
+//只在小于MaxSpeed的时候设置即可，允许玩家冲刺抵消
+void AAnchorPlayerPawn::EndDeceleration()
+{
+	if (GetVelocity().Length() < MaxSpeed)
+	{
+		GetCharacterMovement()->MaxFlySpeed = MaxSpeed;
+	}
+}
+
+void AAnchorPlayerPawn::OnHang()
+{
+	isHanging = true;
 }
 
 void AAnchorPlayerPawn::OnWind(FVector2D Direction)

@@ -18,6 +18,7 @@ struct FInputActionValue;
 class UInputData;
 class USpringArmComponent;
 class UCameraComponent;
+class UCableComponent;
 UCLASS(Blueprintable)
 class GAMEJAMANCHOR_API AAnchorPlayerPawn : public ACharacter
 {
@@ -41,6 +42,21 @@ protected:
 protected:
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Input")
 	TObjectPtr<UInputData> InputData;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Rope")
+	TObjectPtr<UCableComponent> RopeCable;
+
+	/** 绳子顶端的世界坐标。若为零向量，BeginPlay 时自动设为角色上方 500 单位。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rope")
+	FVector RopeTopWorldLocation = FVector::ZeroVector;
+
+	/** 绳子物理段数，越多越平滑。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rope")
+	int32 RopeSegments = 16;
+
+	/** 绳子粗细。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rope")
+	float RopeWidth = 5.0f;
 	
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="NormalSpeed")
 	float MaxSpeed;
@@ -51,11 +67,23 @@ protected:
 	float SprintDurationTime;
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Sprint")
 	float SprintCoolDownTime;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Swing")
+	float SwingSpeed = 3.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Swing")
+	float MaxSwingAngle = 45.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Swing")
+	float SwingInterpSpeed = 15.0f;
 	
 #pragma region InputResponse
 	void DoMove(const FInputActionValue& InputActionValue);
 	void DoSprint(const FInputActionValue& InputActionValue);
+	void DoSprintStarted(const FInputActionValue& InputActionValue);
+	void DoSprintOnGoing(const FInputActionValue& InputActionValue);
 	void DoStruggle(const FInputActionValue& InputActionValue);
+	void OnBreakAway();
 	void EndSprint();
 	void ResetSprint();
 //暂时不需要
@@ -65,8 +93,22 @@ protected:
 #pragma endregion
 	
 #pragma region VelocityResponse	
+	
+	UPROPERTY(BluePrintReadOnly,EditAnywhere)
+	FVector CurrentSprintDirection = FVector(0.0f, 0.0f, -1.0f);
+	
+	bool bIsAiming = false;
+	
 	UFUNCTION(BlueprintCallable)
 	void OnHit();
+	
+	UFUNCTION(BlueprintCallable)
+	void OnDeceleration(const float TimeValue,const float DecelerationRate);
+	
+	void EndDeceleration();
+	
+	UFUNCTION(BlueprintCallable)
+	void OnHang();
 	
 	UFUNCTION(BlueprintCallable)
 	void OnWind(FVector2D Direction);
@@ -76,9 +118,16 @@ protected:
 
 #pragma endregion
 private:
+	FVector VelocityBeforeHanged;
+	
 	float QTETime;
+	bool isHanging;
 	bool isSprinting;
 	bool canSprint ;
+
+	
+	float PendulumStartTime = 0.0f;
+	
 	
 	
 };
