@@ -10,6 +10,7 @@
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
+#include "Framework/SoundManager.h"
 #include "Particles/ParticleSystem.h"
 
 AObstacle::AObstacle(const FObjectInitializer& ObjectInitializer)
@@ -141,7 +142,10 @@ void AObstacle::BeginPlay()
 
 	if (SpawnSound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, SpawnSound, GetActorLocation());
+		if (ASoundManager* SM = Cast<ASoundManager>(GetWorld()->GetGameState()))
+		{
+			SM->PlaySoundAtLocation(SpawnSound, GetActorLocation());
+		}
 	}
 
 	if (SpawnEffect)
@@ -296,7 +300,10 @@ void AObstacle::PlayHitEffects()
 {
 	if (HitSound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, HitSound, GetActorLocation());
+		if (ASoundManager* SM = Cast<ASoundManager>(GetWorld()->GetGameState()))
+		{
+			SM->PlaySoundAtLocation(HitSound, GetActorLocation());
+		}
 	}
 
 	if (HitEffect)
@@ -309,7 +316,10 @@ void AObstacle::PlayDestroyEffects()
 {
 	if (DestroySound)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, DestroySound, GetActorLocation());
+		if (ASoundManager* SM = Cast<ASoundManager>(GetWorld()->GetGameState()))
+		{
+			SM->PlaySoundAtLocation(DestroySound, GetActorLocation());
+		}
 	}
 
 	if (DestroyEffect)

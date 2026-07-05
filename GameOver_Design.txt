@@ -1,0 +1,143 @@
+GameOver 失败判定 — 实现方案
+=================================
+
+## 触发条件
+玩家 Z 轴坐标 > 160 且持续超过 1 秒 → 游戏失败。
+
+## 代码位置
+逻辑写在 AGameJamAnchorGameMode 中（不写在 Pawn 里），因为：
+1. 失败判定是全局规则，GameMode 管规则最合适
+2. 输入模式切换（游戏输入 ↔ UI 输入）由 GameMode 控制 Controller 最方便
+3. 已经有 OnAnchorPlayerOutOfBounds 委托可以复用
+
+---
+
+## GameMode 改动
+
+### GameJamAnchorGameMode.h 新增：
+
+    // ── 游戏失败 ──
+
+    /** 玩家 Z 超过上限后持续多久触发失败（秒）。 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor|GameOver")
+    float OutOfBoundsDuration = 1.0f;
+
+    /** Z 轴上限。 */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor|GameOver")
+    float OutOfBoundsZ = 160.0f;
+
+    /** 是否已触发游戏失败。 */
+    UPROPERTY(BlueprintReadOnly, Category = "Anchor|GameOver")
+    bool bIsGameOver = false;
+
+    /** 触发游戏失败：禁输入、开 UI 模式、玩家坠落。 */
+    UFUNCTION(BlueprintCallable, Category = "Anchor|GameOver")
+    void TriggerGameOver();
+
+    virtual void Tick(float DeltaTime) override;
+
+private:
+    /** Z > 上限累计时间。 */
+    float OutOfBoundsTimer = 0.0f;
+
+
+### GameJamAnchorGameMode.cpp Tick 新增：
+
+    void AGameJamAnchorGameMode::Tick(float DeltaTime)
+    {
+        Super::Tick(DeltaTime);
+
+        if (bIsGameOver) { return; }
+
+        APlayerController* PC = GetWorld()->GetFirstPlayerController();
+        if (!PC) { return; }
+
+        APawn* Pawn = PC->GetPawn();
+        if (!Pawn) { return; }
+
+        if (Pawn->GetActorLocation().Z > OutOfBoundsZ)
+        {
+            OutOfBoundsTimer += DeltaTime;
+            if (OutOfBoundsTimer >= OutOfBoundsDuration)
+            {
+                TriggerGameOver();
+            }
+        }
+        else
+        {
+            OutOfBoundsTimer = 0.0f;  // 回到范围内重新计时
+        }
+    }
+
+
+### GameJamAnchorGameMode.cpp TriggerGameOver 实现：
+
+    void AGameJamAnchorGameMode::TriggerGameOver()
+    {
+        bIsGameOver = true;
+
+        APlayerController* PC = GetWorld()->GetFirstPlayerController();
+        if (!PC) { return; }
+
+        // 1. 广播失败事件（ChunkManager 等监听方停止滚动）
+        ReportAnchorPlayerOutOfBounds();
+
+        // 2. 禁止游戏输入，切到 UI 输入模式
+        if (APawn* Pawn = PC->GetPawn())
+        {
+            Pawn->DisableInput(PC);
+        }
+        PC->SetInputMode(FInputModeUIOnly());
+        PC->bShowMouseCursor = true;
+
+        // 3. 玩家坠落（Mario 掉出地图效果）
+        if (AAnchorPlayerPawn* AnchorPawn = Cast<AAnchorPlayerPawn>(PC->GetPawn()))
+        {
+            UCharacterMovementComponent* MoveComp = AnchorPawn->GetCharacterMovement();
+            MoveComp->SetMovementMode(MOVE_Falling);
+            MoveComp->GravityScale = 1.0f;  // 正常重力
+        }
+
+        // 4. 显示 GameOver UI（蓝图事件）
+        //     在蓝图中绑定此事件即可显示 UMG_GameOver
+    }
+
+
+### 蓝图事件（可选）：
+在 GameMode 上加一个 BlueprintImplementableEvent，蓝图里收到后显示 GameOver 的 UMG：
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Anchor|GameOver")
+    void OnGameOver();
+
+
+---
+
+## 需要确认的事项
+
+1. AAnchorPlayerPawn 当前继承 ACharacter，ACharacter 的 MOVE_Falling 模式有完整的重力模拟。
+   如果 Pawn 当前是在 MOVE_Flying 模式（Anchor 自由下落），切换到 MOVE_Falling 后行为可能不同。
+   建议在 TriggerGameOver 里根据实际需要调整。
+
+2. 玩家坠落后是否需要销毁 Pawn 或加载关卡？当前方案只是让玩家掉下去+切 UI，
+   后续可以加延迟后重新加载关卡。
+
+3. 如果需要在 Pawn 上也做一些事情（比如播放死亡动画），可以通过 GameMode 的
+   OnAnchorPlayerOutOfBounds 委托在 Pawn 或蓝图中监听。
+
+---
+
+## 调用流程图
+
+    Tick 每帧
+      │
+      ├─ Z > 160 ?
+      │   ├─ 否 → 计时器归零
+      │   └─ 是 → 累加 DeltaTime
+      │           └─ ≥ 1.0s ?
+      │               └─ TriggerGameOver()
+      │                     ├─ bIsGameOver = true
+      │                     ├─ Broadcast 失败事件
+      │                     ├─ DisableInput(Pawn)
+      │                     ├─ SetInputMode(UIOnly)
+      │                     ├─ 设 Pawn 为 MOVE_Falling + GravityScale=1
+      │                     └─ 显示 GameOver UI (蓝图事件)
