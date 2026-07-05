@@ -3,7 +3,6 @@
 
 #include "GameJamAnchor/Public/Player/AnchorPlayerPawn.h"
 
-#include "AssetDefinitionAssetInfo.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "HLSLMathAliases.h"
@@ -175,38 +174,7 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 			AddMovementInput(FVector(0,0,1),1);
 		}
 
-		// ── 检测障碍物碰撞 ──
-		{
-			TArray<AActor*> OverlappingActors;
-			GetCapsuleComponent()->GetOverlappingActors(OverlappingActors);
-
-			for (AActor* Actor : OverlappingActors)
-			{
-				AObstacle* Obstacle = Cast<AObstacle>(Actor);
-				if (!IsValid(Obstacle))
-				{
-					continue;
-				}
-
-				UBoxComponent* Box = Obstacle->GetCollisionBox();
-				if (!Box || !GetCapsuleComponent()->IsOverlappingComponent(Box))
-				{
-					continue;
-				}
-
-				// XZ 平面上的推开方向
-				const FVector Delta = GetActorLocation() - Obstacle->GetActorLocation();
-				FVector2D Away2D(Delta.X, Delta.Z);
-				if (Away2D.IsNearlyZero())
-				{
-					Away2D = FVector2D(0.0f, 1.0f);
-				}
-				Away2D.Normalize();
-
-				const float Strength = FMath::Max(MaxSpeed, SprintSpeed);
-				AddMovementInput(FVector(Away2D.X, 0.0f, Away2D.Y), Strength);
-			}
-		}
+		// 障碍阻挡由 AObstacle::Tick 的 Sweep 移动负责，玩家侧不再主动推开。
 	}
 }
 

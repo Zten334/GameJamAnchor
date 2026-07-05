@@ -97,12 +97,12 @@ void AChunk::SpawnObstacles()
 		NewObstacle->WarningSprite = Config.WarningSprite;
 		NewObstacle->WarningOffset = Config.WarningOffset;
 		NewObstacle->WarningSpriteScale = Config.WarningSpriteScale;
-		NewObstacle->ApplyVisualConfig();
 		if (Config.Flipbook)
 		{
 			NewObstacle->Flipbook = Config.Flipbook;
 			UE_LOG(LogTemp, Log, TEXT("Chunk %s assigned Flipbook %s to obstacle %s."), *GetName(), *Config.Flipbook->GetName(), *NewObstacle->GetName());
 		}
+		NewObstacle->ApplyVisualConfig();
 		SpawnedObstacles.Add(NewObstacle);
 		++SpawnedCount;
 	}

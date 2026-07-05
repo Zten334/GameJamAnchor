@@ -3,8 +3,11 @@
 #include "Background/Background.h"
 #include "PaperSpriteComponent.h"
 #include "PaperSprite.h"
-#include "SpriteEditorOnlyTypes.h"
 #include "Engine/Texture2D.h"
+
+#if WITH_EDITOR
+#include "SpriteEditorOnlyTypes.h"
+#endif
 
 ABackground::ABackground(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -41,7 +44,11 @@ void ABackground::BeginPlay()
 		return;
 	}
 
-	const FVector2D SourceSize = FVector2D(SpriteComponent->GetSprite()->GetSourceSize());
+	FVector2D SourceSize = FVector2D::ZeroVector;
+	if (UTexture2D* BakedTexture = SpriteComponent->GetSprite()->GetBakedTexture())
+	{
+		SourceSize = FVector2D(BakedTexture->GetSizeX(), BakedTexture->GetSizeY());
+	}
 	if (SourceSize.X > 0.0f && SourceSize.Y > 0.0f)
 	{
 		const FVector NewScale(BackgroundWidth / SourceSize.X, BackgroundHeight / SourceSize.Y, 1.0f);
@@ -56,6 +63,7 @@ void ABackground::BeginPlay()
 
 UPaperSprite* ABackground::CreateSpriteFromTexture(UTexture2D* Texture)
 {
+#if WITH_EDITOR
 	if (!Texture)
 	{
 		return nullptr;
@@ -68,4 +76,8 @@ UPaperSprite* ABackground::CreateSpriteFromTexture(UTexture2D* Texture)
 	Sprite->InitializeSprite(InitParams);
 
 	return Sprite;
+#else
+	UE_LOG(LogTemp, Warning, TEXT("Background %s: BackgroundTexture is not supported in packaged builds. Assign a BackgroundSprite instead."), *GetName());
+	return nullptr;
+#endif
 }

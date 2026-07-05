@@ -27,11 +27,13 @@ AObstacle::AObstacle(const FObjectInitializer& ObjectInitializer)
 	CollisionBox->SetCollisionProfileName(UCollisionProfile::BlockAllDynamic_ProfileName);
 	CollisionBox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);
 	CollisionBox->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
+	CollisionBox->ShapeColor = FColor::Red;
 
 	OverlapBox = CreateDefaultSubobject<UBoxComponent>(TEXT("OverlapBox"));
 	OverlapBox->SetupAttachment(RootComponent);
 	OverlapBox->SetCollisionProfileName(FName("OverlapAllDynamic"));
 	OverlapBox->SetGenerateOverlapEvents(true);
+	OverlapBox->ShapeColor = FColor::Blue;
 
 	SpriteComponent = CreateDefaultSubobject<UPaperSpriteComponent>(TEXT("SpriteComponent"));
 	SpriteComponent->SetupAttachment(RootScene);
@@ -73,7 +75,11 @@ void AObstacle::OnConstruction(const FTransform& Transform)
 
 	auto CalcSpriteExtent = [](UPaperSprite* Sprite, const FVector& EffectiveScale) -> FVector
 	{
-		const FVector2D SourceSize = Sprite->GetSourceSize();
+		FVector2D SourceSize = FVector2D::ZeroVector;
+		if (UTexture2D* BakedTexture = Sprite->GetBakedTexture())
+		{
+			SourceSize = FVector2D(BakedTexture->GetSizeX(), BakedTexture->GetSizeY());
+		}
 		const float PPU = Sprite->GetPixelsPerUnrealUnit();
 		const float WorldX = (SourceSize.X / PPU) * 0.5f * FMath::Abs(EffectiveScale.X);
 		const float WorldZ = (SourceSize.Y / PPU) * 0.5f * FMath::Abs(EffectiveScale.Z);
@@ -110,9 +116,12 @@ void AObstacle::BeginPlay()
 		SpriteComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		SpriteComponent->SetGenerateOverlapEvents(true);
 
+		// 保留 CollisionBox 作为 Sweep 阻挡体；Sprite 碰撞负责精确的 Overlap/Hit 检测。
+		// 不关闭 CollisionBox，否则 SetActorLocation 的 Sweep 没有可用碰撞形状。
 		if (CollisionBox)
 		{
-			CollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			CollisionBox->SetCollisionProfileName(UCollisionProfile::BlockAllDynamic_ProfileName);
+			CollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		}
 
 		HitComponent = SpriteComponent.Get();
@@ -278,9 +287,50 @@ void AObstacle::Tick(float DeltaTime)
 		UpdateVisualFacing(DeltaX > 0.0f);
 	}
 
+	// ── 手动 Sweep 移动 ──
+	// SetActorLocation(..., true) 只在根组件带碰撞时才有效。障碍根组件是 SceneComponent，
+	// 因此对实际生效的碰撞组件（CollisionBox 或 bUseSpriteCollision 时的 SpriteComponent）手动 Sweep。
+	UPrimitiveComponent* BlockingComp = nullptr;
+	if (CollisionBox && CollisionBox->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
+	{
+		BlockingComp = CollisionBox.Get();
+	}
+	else if (bUseSpriteCollision && SpriteComponent && SpriteComponent->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
+	{
+		BlockingComp = SpriteComponent.Get();
+	}
+
+	if (BlockingComp)
+	{
+		const FCollisionShape Shape = BlockingComp->GetCollisionShape();
+		FCollisionQueryParams Params(NAME_None, false, this);
+		FHitResult SweepHit;
+		const bool bHit = GetWorld()->SweepSingleByProfile(
+			SweepHit,
+			OldLocation,
+			Location,
+			BlockingComp->GetComponentQuat(),
+			BlockingComp->GetCollisionProfileName(),
+			Shape,
+			Params);
+
+		if (bHit && SweepHit.IsValidBlockingHit())
+		{
+			Location = SweepHit.Location;
+
+			AActor* HitActor = SweepHit.GetActor();
+			if (IsPlayerActor(HitActor) && !OverlappedPlayers.Contains(HitActor))
+			{
+				OverlappedPlayers.Add(HitActor);
+				OnOverlapBegin(OverlapBox.Get(), HitActor, nullptr, 0, true, SweepHit);
+			}
+		}
+	}
+
 	SetActorLocation(Location, false);
 
-	// ── 手动 Overlap 检测 + 推玩家 ──
+	// ── 手动 Overlap 检测 ──
+	// 处理 Sweep 没拦到的低速/静止重叠情况（如玩家主动走进障碍）。
 	// 开局 0.3 秒内跳过检测，防止出生时与玩家重叠误触发
 	if (ElapsedLifeTime < 0.3f)
 	{
@@ -289,8 +339,6 @@ void AObstacle::Tick(float DeltaTime)
 
 	if (OverlapBox && OverlapBox->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
 	{
-		const FVector MovementDelta = Location - OldLocation;
-
 		TArray<AActor*> CurrentlyOverlapping;
 		OverlapBox->GetOverlappingActors(CurrentlyOverlapping);
 
@@ -301,52 +349,6 @@ void AObstacle::Tick(float DeltaTime)
 			{
 				OverlappedPlayers.Add(Actor);
 				OnOverlapBegin(OverlapBox.Get(), Actor, nullptr, 0, false, FHitResult());
-			}
-		}
-
-		// 对重叠中的玩家施加推力：方向始终从障碍中心指向玩家（向外推）
-		// 不使用障碍自身速度方向，避免玩家想离开时被反向拉回
-		{
-			const FVector BoxExtent = OverlapBox->GetScaledBoxExtent();
-			const FVector ObstacleCenter = GetActorLocation();
-
-			// 障碍物当前帧的速率，取 max 确保推力至少能跟上障碍自身速度
-			const float ObstacleSpeed = MovementDelta.IsNearlyZero() ? 0.0f : (MovementDelta.Size() / DeltaTime);
-			const float EffectivePushStrength = FMath::Max(OverlapPushStrength, ObstacleSpeed);
-
-			for (AActor* Actor : CurrentlyOverlapping)
-			{
-				if (!IsPlayerActor(Actor))
-				{
-					continue;
-				}
-
-				const FVector PlayerLocation = Actor->GetActorLocation();
-
-				// 方向：从障碍中心 → 玩家（始终向外推，永不会把玩家拉回来）
-				FVector PushDir = PlayerLocation - ObstacleCenter;
-				PushDir.Y = 0.0f; // 2D 游戏
-
-				const float DistToCenter = PushDir.Size();
-				if (DistToCenter < KINDA_SMALL_NUMBER)
-				{
-					continue;
-				}
-				PushDir /= DistToCenter;
-
-				// 重叠深度 (0=边缘, 1=中心)
-				const float OverlapX = 1.0f - FMath::Clamp(FMath::Abs(PlayerLocation.X - ObstacleCenter.X) / FMath::Max(BoxExtent.X, 1.0f), 0.0f, 1.0f);
-				const float OverlapZ = 1.0f - FMath::Clamp(FMath::Abs(PlayerLocation.Z - ObstacleCenter.Z) / FMath::Max(BoxExtent.Z, 1.0f), 0.0f, 1.0f);
-				const float OverlapDepth = FMath::Max(OverlapX, OverlapZ);
-
-				// 推力必须大于玩家自身输入才能有效推开
-				// OverlapPushStrength 默认 800，大于玩家 MaxSpeed(500)
-				const float PushMagnitude = EffectivePushStrength * OverlapDepth;
-
-				if (APawn* Pawn = Cast<APawn>(Actor))
-				{
-					Pawn->AddMovementInput(PushDir, PushMagnitude);
-				}
 			}
 		}
 
@@ -602,8 +604,7 @@ void AObstacle::ApplyVisualConfig()
 	UpdateVisualFacing(VelocityX >= 0.0f);
 	UpdateWarningVisual();
 
-	// 视觉缩放变更后同步更新 OverlapBox
-	if (OverlapBox)
+	// 视觉缩放变更后同步更新 CollisionBox（仅 Sprite 碰撞模式）与 OverlapBox
 	{
 		FVector NewExtent(50.0f, 10.0f, 50.0f);
 		UPaperSprite* RefSprite = nullptr;
@@ -618,14 +619,26 @@ void AObstacle::ApplyVisualConfig()
 
 		if (RefSprite)
 		{
-			const FVector2D SourceSize = RefSprite->GetSourceSize();
+			FVector2D SourceSize = FVector2D::ZeroVector;
+			if (UTexture2D* BakedTexture = RefSprite->GetBakedTexture())
+			{
+				SourceSize = FVector2D(BakedTexture->GetSizeX(), BakedTexture->GetSizeY());
+			}
 			const float PPU = RefSprite->GetPixelsPerUnrealUnit();
 			const FVector Scale = VisualComponent->GetComponentScale();
 			const float WorldX = (SourceSize.X / PPU) * 0.5f * FMath::Abs(Scale.X);
 			const float WorldZ = (SourceSize.Y / PPU) * 0.5f * FMath::Abs(Scale.Z);
 			NewExtent = FVector(WorldX, 10.0f, WorldZ);
 		}
-		OverlapBox->SetBoxExtent(NewExtent + OverlapBoxPadding);
+
+		if (CollisionBox && bUseSpriteCollision)
+		{
+			CollisionBox->SetBoxExtent(NewExtent);
+		}
+		if (OverlapBox)
+		{
+			OverlapBox->SetBoxExtent(NewExtent + OverlapBoxPadding);
+		}
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("Obstacle %s ApplyVisualConfig: BaseScale=%s, RelativeScale=%s, Mirror=%d, FaceRight=%d, InitialScaleX=%.2f."),
