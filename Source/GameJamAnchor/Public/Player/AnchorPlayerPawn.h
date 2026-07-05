@@ -166,11 +166,13 @@ public:
 	/** 缠绕目标 Actor。 */
 	UPROPERTY(BlueprintReadOnly, Category = "Anchor|QTE")
 	TObjectPtr<AActor> FollowTargetActor;
-
+	
+	UPROPERTY(BlueprintReadWrite, Category = "Anchor|QTE")
+	bool canSprint ;
 private:
 	FVector VelocityBeforeHanged;
 	bool isSprinting = false;
-	bool canSprint ;
+	
 	
 	float CurrentSwingAngle = 45.0f;
 	float SwingDir = -1.0f;
