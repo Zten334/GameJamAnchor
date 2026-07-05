@@ -165,7 +165,7 @@ public:
 
 	/** 缠绕目标 Actor。 */
 	UPROPERTY(BlueprintReadOnly, Category = "Anchor|QTE")
-	TObjectPtr<AActor> FollowTargetActor;
+	TWeakObjectPtr<AActor> FollowTargetActor;
 	
 	UPROPERTY(BlueprintReadWrite, Category = "Anchor|QTE")
 	bool canSprint ;

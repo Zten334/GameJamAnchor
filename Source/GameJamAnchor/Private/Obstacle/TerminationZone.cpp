@@ -34,6 +34,13 @@ ATerminationZone::ATerminationZone(const FObjectInitializer& ObjectInitializer)
 	{
 		CollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
+
+	// TerminationZone 使用自己的 GoalZone 做 Overlap 检测，
+	// 不需要父类的 OverlapBox，禁用以避免触发障碍物命中逻辑。
+	if (OverlapBox)
+	{
+		OverlapBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
 }
 
 void ATerminationZone::BeginPlay()
@@ -43,6 +50,13 @@ void ATerminationZone::BeginPlay()
 	if (CollisionBox)
 	{
 		CollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	// TerminationZone 使用自己的 GoalZone 做 Overlap 检测，
+	// 不需要父类的 OverlapBox，禁用以避免触发障碍物命中逻辑。
+	if (OverlapBox)
+	{
+		OverlapBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 }
 

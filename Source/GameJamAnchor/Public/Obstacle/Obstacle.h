@@ -22,6 +22,7 @@ class GAMEJAMANCHOR_API AObstacle : public AActor
 public:
 	AObstacle(const FObjectInitializer& ObjectInitializer);
 
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
@@ -88,6 +89,10 @@ public:
 	/** 是否使用 Sprite 自带的碰撞几何体作为碰撞体。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Collision", meta = (ToolTip = "勾选时使用 PaperSprite 自带的碰撞几何体（需在 Sprite 编辑器里设置），并关闭 BoxComponent。适用于不规则形状的障碍。"))
 	bool bUseSpriteCollision = false;
+
+	/** OverlapBox 在视觉组件包围盒基础上的额外扩展量（世界单位）。X/Y/Z 分别对应包围盒的 X/Y/Z 方向。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Collision", meta = (ToolTip = "OverlapBox 在 Sprite/Flipbook 渲染包围盒基础上的额外扩展量。例如 (20, 0, 20) 表示 XZ 方向各扩大 20 单位，Y 方向不变。"))
+	FVector OverlapBoxPadding = FVector(20.0f, 0.0f, 20.0f);
 
 	/** 命中玩家时触发的效果标签。同伴的 Pawn 会根据此标签处理减速、击退等效果。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Hit", meta = (ToolTip = "命中玩家时触发的效果标签，例如 Slow、Knockback、Damage。同伴的 Pawn 会监听 GameMode 的 OnPlayerHitObstacle 委托并据此处理。"))
@@ -178,6 +183,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Anchor Obstacle|Components", meta = (ToolTip = "障碍的碰撞体，用于与玩家 Pawn 做碰撞/重叠判定。"))
 	TObjectPtr<class UBoxComponent> CollisionBox;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Anchor Obstacle|Components", meta = (ToolTip = "障碍的 Overlap 触发器，比 CollisionBox 稍大，用于检测玩家接触。不依赖物理速度即可触发。"))
+	TObjectPtr<class UBoxComponent> OverlapBox;
+
 	/** 障碍的 Flipbook 动画组件。设置了 Flipbook 资产后会自动启用。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Anchor Obstacle|Components", meta = (ToolTip = "障碍的 Flipbook 动画组件。在 Details 面板中指定 Flipbook 资产后，运行时会自动播放动画。"))
 	TObjectPtr<class UPaperFlipbookComponent> FlipbookComponent;
@@ -212,15 +220,27 @@ protected:
 	/** 检查并执行生命周期 / 距离销毁。 */
 	void CheckDestroyConditions();
 
-	/** 碰撞/重叠命中玩家时的回调。 */
+	/** 碰撞/重叠命中玩家时的回调（保留兼容，不再主动绑定 Hit 事件）。 */
 	UFUNCTION()
 	void OnHitPlayer(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
+
+	/** OverlapBox 开始重叠时的回调。替代 OnComponentHit，不依赖物理速度。 */
+	UFUNCTION()
+	void OnOverlapBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+	/** OverlapBox 结束重叠时的回调。用于重置一次性效果标记。 */
+	UFUNCTION()
+	void OnOverlapEnd(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
 	/** 判断碰撞对象是否是玩家 Pawn（通过 Tag "Anchor.Player"）。 */
 	bool IsPlayerActor(AActor* Actor) const;
 
 	/** 是否已经对当前玩家触发过效果。 */
 	bool bEffectAlreadyApplied = false;
+
+	/** 当前处于 OverlapBox 内的玩家集合（手动追踪，不依赖物理事件）。 */
+	UPROPERTY()
+	TSet<TObjectPtr<AActor>> OverlappedPlayers;
 
 	/** 被冲刺击碎时的处理。蓝图可在 ReceiveOnDashBroken 里播放断裂动画。 */
 	void OnDashBroken();

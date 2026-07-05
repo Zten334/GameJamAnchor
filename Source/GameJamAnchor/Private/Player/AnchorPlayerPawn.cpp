@@ -132,11 +132,11 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 	else if (QTETime > 0.0f)
 	{
 		QTETime -= DeltaTime;
-		if (!FollowTargetActor)
+		if (!FollowTargetActor.IsValid())
 		{
 			return;
 		}
-		SetActorLocation(FVector(FollowTargetActor->GetActorLocation().X,0.f,FollowTargetActor->GetActorLocation().Z));
+		SetActorLocation(FVector(FollowTargetActor->GetActorLocation().X,GetActorLocation().Y,FollowTargetActor->GetActorLocation().Z));
 		
 		/*
 		const float TwineForce = 0.5f;
@@ -178,7 +178,7 @@ void AAnchorPlayerPawn::DoMove(const FInputActionValue& InputActionValue)
 {
 	const FVector2D Movement = InputActionValue.Get<FVector2D>();
 	
-	UE_LOG(LogTemp, Warning, TEXT("%s"),*Movement.ToString());
+	//UE_LOG(LogTemp, Warning, TEXT("%s"),*Movement.ToString());
 	if (!Controller || Movement.IsNearlyZero())
 	{
 		return;
@@ -275,7 +275,7 @@ void AAnchorPlayerPawn::DoSprintOnGoing(const FInputActionValue& InputActionValu
 void AAnchorPlayerPawn::DoStruggle(const FInputActionValue& InputActionValue)
 {
 	//减少QTE时间
-	QTETime -= 0.1f;
+	QTETime -= 0.3f;
 	QTETime =  FMath::Max(0.0f, QTETime);
 }
 

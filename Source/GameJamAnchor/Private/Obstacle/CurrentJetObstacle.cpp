@@ -28,6 +28,13 @@ ACurrentJetObstacle::ACurrentJetObstacle(const FObjectInitializer& ObjectInitial
 		CollisionBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
+	// CurrentJetObstacle 使用自己的 CurrentTriggerBox 做 Overlap 检测，
+	// 不需要父类的 OverlapBox，禁用以避免重复触发。
+	if (OverlapBox)
+	{
+		OverlapBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
 	CurrentTriggerBox->OnComponentBeginOverlap.AddDynamic(this, &ACurrentJetObstacle::OnCurrentBeginOverlap);
 	CurrentTriggerBox->OnComponentEndOverlap.AddDynamic(this, &ACurrentJetObstacle::OnCurrentEndOverlap);
 }
