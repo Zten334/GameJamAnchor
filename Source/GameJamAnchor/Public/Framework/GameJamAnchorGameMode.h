@@ -8,6 +8,7 @@
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAnchorPlayerOutOfBounds);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAnchorPlayerHitObstacle, AActor*, Hitter, FName, EffectTag);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAnchorPlayerReachedGoal);
 
 UCLASS(Blueprintable)
 class GAMEJAMANCHOR_API AGameJamAnchorGameMode : public AGameModeBase
@@ -34,6 +35,14 @@ public:
 	/** 由 AObstacle 调用，广播玩家撞到障碍的事件。 */
 	UFUNCTION(BlueprintCallable, Category = "Anchor Events", meta = (ToolTip = "由障碍调用，用于通知玩家 Pawn 玩家被撞到了，并告知效果标签。"))
 	void ReportPlayerHitObstacle(AActor* Hitter, FName EffectTag);
+
+	/** 玩家到达终点区域时触发。ATerminationZone 会调用 ReportPlayerReachedGoal 广播。 */
+	UPROPERTY(BlueprintAssignable, Category = "Anchor Events", meta = (ToolTip = "玩家到达终点区域时触发。可在蓝图里绑定以播放胜利动画、切换关卡等。"))
+	FOnAnchorPlayerReachedGoal OnAnchorPlayerReachedGoal;
+
+	/** 由 ATerminationZone 调用，广播玩家到达终点事件。 */
+	UFUNCTION(BlueprintCallable, Category = "Anchor Events", meta = (ToolTip = "由终点区域调用，通知游戏玩家已到达终点。"))
+	void ReportPlayerReachedGoal();
 
 protected:
 	/** 关卡中放置的静态 2D 相机。GameMode 会在玩家加入后把视角切到该相机。 */

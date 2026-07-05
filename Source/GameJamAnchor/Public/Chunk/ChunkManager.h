@@ -50,6 +50,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Anchor Chunk", meta = (ToolTip = "是否已经生成过终点 Chunk。生成后会停止继续补充新 Chunk。"))
 	bool bHasSpawnedTerminationChunk = false;
 
+	/** 停止 Chunk 滚动。会停止自身 Tick 并把 ScrollSpeed 置 0。 */
+	UFUNCTION(BlueprintCallable, Category = "Anchor Chunk")
+	void StopScrolling();
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -136,4 +140,11 @@ protected:
 	/** 当前生成的背景 Actor。 */
 	UPROPERTY()
 	TObjectPtr<class ABackground> CurrentBackgroundActor = nullptr;
+
+	/** 已生成的终点 Chunk 实例。用于判断终点 Chunk 是否完全出屏并停止滚动。 */
+	UPROPERTY()
+	TObjectPtr<class AChunk> TerminationChunkInstance = nullptr;
+
+	/** 检查终点 Chunk 是否已完全出屏，若是则停止滚动。 */
+	void StopScrollingIfTerminationDone();
 };

@@ -4,7 +4,9 @@
 #include "Chunk/Chunk.h"
 #include "Background/Background.h"
 #include "Framework/GameJamAnchorGameMode.h"
+#include "Obstacle/Obstacle.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 
 AChunkManager::AChunkManager(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -37,6 +39,7 @@ void AChunkManager::Tick(float DeltaTime)
 	RecycleChunks();
 	SpawnNewChunksIfNeeded();
 	UpdateBackgroundPhase();
+	StopScrollingIfTerminationDone();
 }
 
 void AChunkManager::OnPlayerOutOfBounds()
@@ -109,6 +112,7 @@ void AChunkManager::SpawnChunkAtCenterZ(float CenterZ, TSubclassOf<AChunk> Class
 	if (TerminationChunkClass && ClassToSpawn == TerminationChunkClass)
 	{
 		bHasSpawnedTerminationChunk = true;
+		TerminationChunkInstance = NewChunk;
 		UE_LOG(LogTemp, Log, TEXT("ChunkManager: spawned termination chunk (#%d)."), SpawnedChunkCount);
 	}
 }
@@ -296,4 +300,37 @@ float AChunkManager::GetDefaultTrailingGap(TSubclassOf<AChunk> InChunkClass) con
 		return DefaultChunk->TrailingGap;
 	}
 	return 0.0f;
+}
+
+void AChunkManager::StopScrolling()
+{
+	bIsScrolling = false;
+	ScrollSpeed = 0.0f;
+	SetActorTickEnabled(false);
+
+	for (TActorIterator<AObstacle> It(GetWorld()); It; ++It)
+	{
+		if (AObstacle* Obstacle = *It)
+		{
+			Obstacle->bScrollWithChunk = false;
+			Obstacle->ScrollSpeed = 0.0f;
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("ChunkManager: scrolling stopped."));
+}
+
+void AChunkManager::StopScrollingIfTerminationDone()
+{
+	if (!bHasSpawnedTerminationChunk || !TerminationChunkInstance)
+	{
+		return;
+	}
+
+	const float ChunkBottomZ = TerminationChunkInstance->GetActorLocation().Z - (TerminationChunkInstance->ChunkHeight / 2.0f);
+	if (ChunkBottomZ >= ScreenTopZ)
+	{
+		StopScrolling();
+		UE_LOG(LogTemp, Log, TEXT("ChunkManager: termination chunk fully scrolled out, stopping scroll."));
+	}
 }

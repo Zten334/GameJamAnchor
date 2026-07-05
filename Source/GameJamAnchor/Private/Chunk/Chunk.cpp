@@ -93,6 +93,10 @@ void AChunk::SpawnObstacles()
 		NewObstacle->SetActorRotation(Config.RelativeRotation);
 		NewObstacle->bMirrorX = Config.bMirrorX;
 		NewObstacle->RelativeScale3D = Config.RelativeScale3D;
+		NewObstacle->bShowWarning = Config.bShowWarning;
+		NewObstacle->WarningSprite = Config.WarningSprite;
+		NewObstacle->WarningOffset = Config.WarningOffset;
+		NewObstacle->WarningSpriteScale = Config.WarningSpriteScale;
 		NewObstacle->ApplyVisualConfig();
 		if (Config.Flipbook)
 		{
