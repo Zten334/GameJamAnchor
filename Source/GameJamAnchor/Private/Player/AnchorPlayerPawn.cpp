@@ -14,6 +14,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "TimerManager.h"
 #include "GameJamAnchor/Public/Player/Input/InputData.h"
+#include "Framework/GameJamAnchorGameMode.h"
 
 #include "Blueprint/UserWidget.h"
 #include "DataWrappers/ChaosVDParticleDataWrapper.h"
@@ -48,6 +49,9 @@ AAnchorPlayerPawn::AAnchorPlayerPawn(const FObjectInitializer& ObjectInitializer
 	SprintCoolDownTime = 2.5f;
 	SprintDurationTime = 0.5f;
 	canSprint = true;
+
+	DirectionIndicator = CreateDefaultSubobject<UPaperSpriteComponent>(TEXT("DirectionIndicator"));
+	DirectionIndicator->SetupAttachment(RootComponent);
 }
 
 void AAnchorPlayerPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -103,11 +107,22 @@ void AAnchorPlayerPawn::BeginPlay()
 	Super::BeginPlay();
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC) return;
+
+	// ── 玩家 Tag，供 AObstacle::IsPlayerActor 识别 ──
+	Tags.Add(FName(TEXT("Anchor.Player")));
+
+	// ── 绑定障碍碰撞事件 ──
+	if (AGameJamAnchorGameMode* GameMode = Cast<AGameJamAnchorGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		GameMode->OnPlayerHitObstacle.AddDynamic(this, &AAnchorPlayerPawn::OnObstacleHitPlayer);
+	}
 }
 
 void AAnchorPlayerPawn::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	UpdateDirectionIndicator();
 
 	//UE_LOG(LogTemp, Warning, TEXT("%f"),GetVelocity().Length());
 	if (isHanging)
@@ -304,9 +319,9 @@ void AAnchorPlayerPawn::OnHit()
 	}
 }
 
-void AAnchorPlayerPawn::OnDeceleration(const float TimeValue,const float DecelerationRate)
+void AAnchorPlayerPawn::OnDeceleration(const float TimeValue,const float DecelerationRateValue)
 {
-	GetCharacterMovement()->MaxFlySpeed = MaxSpeed * DecelerationRate;
+	GetCharacterMovement()->MaxFlySpeed = MaxSpeed * DecelerationRateValue;
 	FTimerHandle DecelerationEndHandle;
 	
 	// 6. 【新增】设置冲刺持续时间计时器（时间到后恢复速度上限）
@@ -350,8 +365,87 @@ void AAnchorPlayerPawn::OnTwine(float QUEValue,AActor* TwinActor)
 	QTETime += QUEValue;
 }
 
+// ── 障碍 EffectTag 路由 ──
 
+void AAnchorPlayerPawn::OnObstacleHitPlayer(AActor* Hitter, FName EffectTag)
+{
+	if (!Hitter)
+	{
+		return;
+	}
 
+	if (EffectTag == SlowEffectTag)
+	{
+		OnDeceleration(DecelerationDuration, DecelerationRate);
+		UE_LOG(LogTemp, Log, TEXT("Pawn: Obstacle [%s] triggered Slow."), *Hitter->GetName());
+	}
+	else if (EffectTag == WindEffectTag)
+	{
+		const FVector Dir = (GetActorLocation() - Hitter->GetActorLocation()).GetSafeNormal2D();
+		OnWind(FVector2D(Dir.X, Dir.Z) * WindStrength);
+		UE_LOG(LogTemp, Log, TEXT("Pawn: Obstacle [%s] triggered Wind."), *Hitter->GetName());
+	}
+	else if (EffectTag == HangEffectTag)
+	{
+		OnHang();
+		UE_LOG(LogTemp, Log, TEXT("Pawn: Obstacle [%s] triggered Hang."), *Hitter->GetName());
+	}
+	else if (EffectTag == TwineEffectTag)
+	{
+		OnTwine(TwineDefaultQTETime, Hitter);
+		UE_LOG(LogTemp, Log, TEXT("Pawn: Obstacle [%s] triggered Twine."), *Hitter->GetName());
+	}
+	else if (EffectTag == HitEffectTag)
+	{
+		OnHit();
+		UE_LOG(LogTemp, Log, TEXT("Pawn: Obstacle [%s] triggered Hit."), *Hitter->GetName());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Pawn: Unknown EffectTag [%s] from Obstacle [%s]."), *EffectTag.ToString(), *Hitter->GetName());
+	}
+}
+
+// ── IAnchorPlayerInterface 实现 ──
+
+bool AAnchorPlayerPawn::IsDashing_Implementation() const
+{
+	return isSprinting;
+}
+
+FVector AAnchorPlayerPawn::GetDashDirection_Implementation() const
+{
+	return CurrentSprintDirection;
+}
+
+void AAnchorPlayerPawn::ApplyCurrentForce_Implementation(FVector ForcePerSecond)
+{
+	AddMovementInput(ForcePerSecond.GetSafeNormal(), ForcePerSecond.Size() * 0.01f);
+}
+
+// ── 方向指示 ──
+
+void AAnchorPlayerPawn::UpdateDirectionIndicator()
+{
+	if (!DirectionIndicator)
+	{
+		return;
+	}
+
+	const FVector Vel = GetVelocity();
+	if (Vel.IsNearlyZero())
+	{
+		return;
+	}
+
+	// 速度在 XZ 平面的方向角
+	const float Angle = FMath::RadiansToDegrees(FMath::Atan2(Vel.X, Vel.Z));
+
+	// 钳制到配置的角度范围
+	const float ClampedAngle = FMath::Clamp(Angle, IndicatorMinAngle, IndicatorMaxAngle);
+
+	DirectionIndicator->SetRelativeRotation(FRotator(ClampedAngle, 0.0f, 0.0f));
+}
 
 
 

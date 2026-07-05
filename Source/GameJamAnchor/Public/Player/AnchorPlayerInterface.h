@@ -13,6 +13,8 @@ class UAnchorPlayerInterface : public UInterface
 };
 
 /**
+ *
+ *
  * 玩家锚的公共接口。
  * 场景系统（障碍、Chunk 等）通过此接口查询玩家状态，避免直接依赖具体 Pawn 类。
  */

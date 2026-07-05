@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "Player/AnchorPlayerInterface.h"
+#include "PaperSpriteComponent.h"
 #include "AnchorPlayerPawn.generated.h"
 
 class UMovementComponent;
@@ -18,8 +20,9 @@ struct FInputActionValue;
 class UInputData;
 class USpringArmComponent;
 class UCameraComponent;
+
 UCLASS(Blueprintable)
-class GAMEJAMANCHOR_API AAnchorPlayerPawn : public ACharacter
+class GAMEJAMANCHOR_API AAnchorPlayerPawn : public ACharacter, public IAnchorPlayerInterface
 {
 	GENERATED_BODY()
 
@@ -41,6 +44,20 @@ protected:
 protected:
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="Input")
 	TObjectPtr<UInputData> InputData;
+
+	/** 方向指示精灵，根据速度方向旋转。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Anchor|Indicator")
+	TObjectPtr<UPaperSpriteComponent> DirectionIndicator;
+
+	/** 方向指示最小旋转角度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor|Indicator")
+	float IndicatorMinAngle = -90.0f;
+
+	/** 方向指示最大旋转角度。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor|Indicator")
+	float IndicatorMaxAngle = 90.0f;
+
+	void UpdateDirectionIndicator();
 
 
 	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly,Category="NormalSpeed")
@@ -86,7 +103,7 @@ protected:
 	void OnHit();
 	
 	UFUNCTION(BlueprintCallable)
-	void OnDeceleration(const float TimeValue,const float DecelerationRate);
+	void OnDeceleration(const float TimeValue,const float DecelerationRateValue);
 	
 	void EndDeceleration();
 	
@@ -99,19 +116,61 @@ protected:
 	UFUNCTION(BlueprintCallable)
 	void OnTwine(float QUEValue,AActor* TwinActor);
 
+	// ── IAnchorPlayerInterface 实现 ──
+
+	virtual bool IsDashing_Implementation() const override;
+	virtual FVector GetDashDirection_Implementation() const override;
+	virtual void ApplyCurrentForce_Implementation(FVector ForcePerSecond) override;
+
+	// ── 障碍碰撞事件绑定与路由 ──
+
+	UFUNCTION()
+	void OnObstacleHitPlayer(AActor* Hitter, FName EffectTag);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|EffectTags")
+	FName SlowEffectTag = "Slow";
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|EffectTags")
+	FName WindEffectTag = "Wind";
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|EffectTags")
+	FName HangEffectTag = "Hang";
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|EffectTags")
+	FName TwineEffectTag = "Twine";
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|EffectTags")
+	FName HitEffectTag = "Hit";
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Deceleration")
+	float DecelerationDuration = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Deceleration")
+	float DecelerationRate = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Wind")
+	float WindStrength = 200.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Twine")
+	float TwineDefaultQTETime = 3.0f;
+
 #pragma endregion
 public:
-	UPROPERTY(EditDefaultsOnly,BlueprintReadOnly)
-	float QTETime;
-	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Anchor|QTE")
+	float QTETime = 0.0f;
+
+	/** 是否处于悬挂状态。 */
+	UPROPERTY(BlueprintReadOnly, Category = "Anchor|QTE")
+	bool isHanging = false;
+
+	/** 缠绕目标 Actor。 */
+	UPROPERTY(BlueprintReadOnly, Category = "Anchor|QTE")
+	TObjectPtr<AActor> FollowTargetActor;
+
 private:
 	FVector VelocityBeforeHanged;
-	bool isHanging;
-	bool isSprinting;
+	bool isSprinting = false;
 	bool canSprint ;
-	
-	UPROPERTY()
-	TObjectPtr<AActor> FollowTargetActor;
 	
 	float CurrentSwingAngle = 45.0f;
 	float SwingDir = -1.0f;
