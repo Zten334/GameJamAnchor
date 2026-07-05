@@ -15,6 +15,8 @@
 #include "TimerManager.h"
 #include "GameJamAnchor/Public/Player/Input/InputData.h"
 #include "Framework/GameJamAnchorGameMode.h"
+#include "Obstacle/Obstacle.h"
+#include "Components/BoxComponent.h"
 
 #include "Blueprint/UserWidget.h"
 #include "DataWrappers/ChaosVDParticleDataWrapper.h"
@@ -115,6 +117,7 @@ void AAnchorPlayerPawn::BeginPlay()
 	if (AGameJamAnchorGameMode* GameMode = Cast<AGameJamAnchorGameMode>(GetWorld()->GetAuthGameMode()))
 	{
 		GameMode->OnPlayerHitObstacle.AddDynamic(this, &AAnchorPlayerPawn::OnObstacleHitPlayer);
+		GameMode->OnAnchorPlayerReachedGoal.AddDynamic(this, &AAnchorPlayerPawn::OnRaceEnd);
 	}
 }
 
@@ -170,6 +173,39 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 		else if(GetActorLocation().Z < -1.f)
 		{
 			AddMovementInput(FVector(0,0,1),1);
+		}
+
+		// ── 检测障碍物碰撞 ──
+		{
+			TArray<AActor*> OverlappingActors;
+			GetCapsuleComponent()->GetOverlappingActors(OverlappingActors);
+
+			for (AActor* Actor : OverlappingActors)
+			{
+				AObstacle* Obstacle = Cast<AObstacle>(Actor);
+				if (!IsValid(Obstacle))
+				{
+					continue;
+				}
+
+				UBoxComponent* Box = Obstacle->GetCollisionBox();
+				if (!Box || !GetCapsuleComponent()->IsOverlappingComponent(Box))
+				{
+					continue;
+				}
+
+				// XZ 平面上的推开方向
+				const FVector Delta = GetActorLocation() - Obstacle->GetActorLocation();
+				FVector2D Away2D(Delta.X, Delta.Z);
+				if (Away2D.IsNearlyZero())
+				{
+					Away2D = FVector2D(0.0f, 1.0f);
+				}
+				Away2D.Normalize();
+
+				const float Strength = FMath::Max(MaxSpeed, SprintSpeed);
+				AddMovementInput(FVector(Away2D.X, 0.0f, Away2D.Y), Strength);
+			}
 		}
 	}
 }
@@ -309,14 +345,59 @@ void AAnchorPlayerPawn::DoDecelation(const FInputActionValue& InputActionValue)
 
 void AAnchorPlayerPawn::OnHit()
 {
-	int type = 0;
-	switch (type)
+	UE_LOG(LogTemp, Log, TEXT("Pawn: OnHit - creating game-over UI."));
+
+	if (!LoseScreenWidgetClass)
 	{
-	case 0:
-		
-		break;
-		default:
-		break;
+		UE_LOG(LogTemp, Warning, TEXT("Pawn: LoseScreenWidgetClass is not set. Cannot show game-over screen."));
+		return;
+	}
+
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC)
+	{
+		return;
+	}
+
+	UUserWidget* LoseWidget = CreateWidget<UUserWidget>(PC, LoseScreenWidgetClass);
+	if (LoseWidget)
+	{
+		LoseWidget->AddToViewport();
+
+		// 显示鼠标，允许玩家点击 UI 按钮
+		PC->SetShowMouseCursor(true);
+		PC->SetInputMode(FInputModeUIOnly());
+
+		UE_LOG(LogTemp, Log, TEXT("Pawn: Game-over UI added to viewport."));
+	}
+}
+
+void AAnchorPlayerPawn::OnRaceEnd()
+{
+	UE_LOG(LogTemp, Log, TEXT("Pawn: OnRaceEnd - creating victory UI."));
+
+	if (!VictoryScreenWidgetClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Pawn: VictoryScreenWidgetClass is not set. Cannot show victory screen."));
+		return;
+	}
+
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC)
+	{
+		return;
+	}
+
+	UUserWidget* VictoryWidget = CreateWidget<UUserWidget>(PC, VictoryScreenWidgetClass);
+	if (VictoryWidget)
+	{
+		VictoryWidget->AddToViewport();
+
+		// 显示鼠标，允许玩家点击 UI 按钮
+		PC->SetShowMouseCursor(true);
+		PC->SetInputMode(FInputModeUIOnly());
+
+		UE_LOG(LogTemp, Log, TEXT("Pawn: Victory UI added to viewport."));
 	}
 }
 
@@ -399,7 +480,12 @@ void AAnchorPlayerPawn::OnObstacleHitPlayer(AActor* Hitter, FName EffectTag)
 	else if (EffectTag == HitEffectTag)
 	{
 		OnHit();
-		UE_LOG(LogTemp, Log, TEXT("Pawn: Obstacle [%s] triggered Hit."), *Hitter->GetName());
+		UE_LOG(LogTemp, Log, TEXT("Pawn: Obstacle [%s] triggered Hit (Game Over)."), *Hitter->GetName());
+	}
+	else if (EffectTag == VictoryEffectTag)
+	{
+		OnRaceEnd();
+		UE_LOG(LogTemp, Log, TEXT("Pawn: Obstacle [%s] triggered Victory."), *Hitter->GetName());
 	}
 	else
 	{

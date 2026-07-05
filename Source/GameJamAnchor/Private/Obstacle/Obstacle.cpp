@@ -13,6 +13,7 @@
 #include "Framework/SoundManager.h"
 #include "Particles/ParticleSystem.h"
 
+
 AObstacle::AObstacle(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
@@ -24,6 +25,8 @@ AObstacle::AObstacle(const FObjectInitializer& ObjectInitializer)
 	CollisionBox = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionBox"));
 	CollisionBox->SetupAttachment(RootComponent);
 	CollisionBox->SetCollisionProfileName(UCollisionProfile::BlockAllDynamic_ProfileName);
+	CollisionBox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);
+	CollisionBox->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
 
 	OverlapBox = CreateDefaultSubobject<UBoxComponent>(TEXT("OverlapBox"));
 	OverlapBox->SetupAttachment(RootComponent);
@@ -48,6 +51,11 @@ AObstacle::AObstacle(const FObjectInitializer& ObjectInitializer)
 	{
 		SpriteComponent->SetSprite(DefaultSprite);
 	}
+}
+
+UBoxComponent* AObstacle::GetCollisionBox() const
+{
+	return CollisionBox.Get();
 }
 
 void AObstacle::OnConstruction(const FTransform& Transform)
@@ -216,7 +224,8 @@ void AObstacle::Tick(float DeltaTime)
 		return;
 	}
 
-	FVector Location = GetActorLocation();
+	const FVector OldLocation = GetActorLocation();
+	FVector Location = OldLocation;
 	const float OldX = Location.X;
 
 	if (bScrollWithChunk)
@@ -269,24 +278,75 @@ void AObstacle::Tick(float DeltaTime)
 		UpdateVisualFacing(DeltaX > 0.0f);
 	}
 
-	SetActorLocation(Location);
+	SetActorLocation(Location, false);
 
-	// ── 手动 Overlap 检测 ──
-	// SetActorLocation 是传送，物理系统 Overlap 事件不可靠。
-	// 每帧手动查询 GetOverlappingActors，与 OverlappedPlayers 对比来模拟 Enter/Leave。
+	// ── 手动 Overlap 检测 + 推玩家 ──
+	// 开局 0.3 秒内跳过检测，防止出生时与玩家重叠误触发
+	if (ElapsedLifeTime < 0.3f)
+	{
+		return;
+	}
+
 	if (OverlapBox && OverlapBox->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
 	{
+		const FVector MovementDelta = Location - OldLocation;
+
 		TArray<AActor*> CurrentlyOverlapping;
 		OverlapBox->GetOverlappingActors(CurrentlyOverlapping);
 
-		// 找出新进入的玩家（Enter）
+		// 找出新进入的玩家（Enter）—— 效果触发
 		for (AActor* Actor : CurrentlyOverlapping)
 		{
 			if (IsPlayerActor(Actor) && !OverlappedPlayers.Contains(Actor))
 			{
 				OverlappedPlayers.Add(Actor);
-				// 直接调用已有的重叠处理逻辑
 				OnOverlapBegin(OverlapBox.Get(), Actor, nullptr, 0, false, FHitResult());
+			}
+		}
+
+		// 对重叠中的玩家施加推力：方向始终从障碍中心指向玩家（向外推）
+		// 不使用障碍自身速度方向，避免玩家想离开时被反向拉回
+		{
+			const FVector BoxExtent = OverlapBox->GetScaledBoxExtent();
+			const FVector ObstacleCenter = GetActorLocation();
+
+			// 障碍物当前帧的速率，取 max 确保推力至少能跟上障碍自身速度
+			const float ObstacleSpeed = MovementDelta.IsNearlyZero() ? 0.0f : (MovementDelta.Size() / DeltaTime);
+			const float EffectivePushStrength = FMath::Max(OverlapPushStrength, ObstacleSpeed);
+
+			for (AActor* Actor : CurrentlyOverlapping)
+			{
+				if (!IsPlayerActor(Actor))
+				{
+					continue;
+				}
+
+				const FVector PlayerLocation = Actor->GetActorLocation();
+
+				// 方向：从障碍中心 → 玩家（始终向外推，永不会把玩家拉回来）
+				FVector PushDir = PlayerLocation - ObstacleCenter;
+				PushDir.Y = 0.0f; // 2D 游戏
+
+				const float DistToCenter = PushDir.Size();
+				if (DistToCenter < KINDA_SMALL_NUMBER)
+				{
+					continue;
+				}
+				PushDir /= DistToCenter;
+
+				// 重叠深度 (0=边缘, 1=中心)
+				const float OverlapX = 1.0f - FMath::Clamp(FMath::Abs(PlayerLocation.X - ObstacleCenter.X) / FMath::Max(BoxExtent.X, 1.0f), 0.0f, 1.0f);
+				const float OverlapZ = 1.0f - FMath::Clamp(FMath::Abs(PlayerLocation.Z - ObstacleCenter.Z) / FMath::Max(BoxExtent.Z, 1.0f), 0.0f, 1.0f);
+				const float OverlapDepth = FMath::Max(OverlapX, OverlapZ);
+
+				// 推力必须大于玩家自身输入才能有效推开
+				// OverlapPushStrength 默认 800，大于玩家 MaxSpeed(500)
+				const float PushMagnitude = EffectivePushStrength * OverlapDepth;
+
+				if (APawn* Pawn = Cast<APawn>(Actor))
+				{
+					Pawn->AddMovementInput(PushDir, PushMagnitude);
+				}
 			}
 		}
 

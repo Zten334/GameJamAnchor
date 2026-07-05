@@ -10,6 +10,8 @@
 #include "PaperFlipbookComponent.h"
 #include "Obstacle.generated.h"
 
+class UBoxComponent;
+
 /**
  * 障碍基类。静态障碍只随场景上移；动态障碍额外在 X 方向做正弦摆动。
  * 支持不跟随 Chunk 滚动的独立障碍，并可通过生命周期或距离自动销毁。
@@ -94,6 +96,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Collision", meta = (ToolTip = "OverlapBox 在 Sprite/Flipbook 渲染包围盒基础上的额外扩展量。例如 (20, 0, 20) 表示 XZ 方向各扩大 20 单位，Y 方向不变。"))
 	FVector OverlapBoxPadding = FVector(20.0f, 0.0f, 20.0f);
 
+	/** Overlap 推力强度（世界单位/秒）。玩家进入 OverlapBox 后被向外推的基准速度。方向始终从障碍中心指向玩家，不会产生反向拉力。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Collision", meta = (ToolTip = "玩家进入 OverlapBox 后被向外推的基准速度（世界单位/秒）。推力方向始终从障碍中心指向玩家（向外），不会因障碍移动方向而产生反向拉力。值越大推开越快。"))
+	float OverlapPushStrength = 800.0f;
+
 	/** 命中玩家时触发的效果标签。同伴的 Pawn 会根据此标签处理减速、击退等效果。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Hit", meta = (ToolTip = "命中玩家时触发的效果标签，例如 Slow、Knockback、Damage。同伴的 Pawn 会监听 GameMode 的 OnPlayerHitObstacle 委托并据此处理。"))
 	FName EffectTag;
@@ -172,6 +178,9 @@ public:
 
 	/** 由 Chunk 生成后调用，应用配置中的旋转/镜像/缩放等视觉设置。 */
 	void ApplyVisualConfig();
+
+	/** 供外部（玩家 Pawn 等）读取 CollisionBox 做碰撞检测。 */
+	UBoxComponent* GetCollisionBox() const;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Anchor Obstacle|Components", meta = (ToolTip = "根场景组件。"))

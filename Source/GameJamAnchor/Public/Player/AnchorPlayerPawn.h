@@ -6,6 +6,8 @@
 #include "GameFramework/Character.h"
 #include "Player/AnchorPlayerInterface.h"
 #include "PaperSpriteComponent.h"
+class UUserWidget;
+
 #include "AnchorPlayerPawn.generated.h"
 
 class UMovementComponent;
@@ -101,6 +103,9 @@ protected:
 	
 	UFUNCTION(BlueprintCallable)
 	void OnHit();
+
+	UFUNCTION(BlueprintCallable)
+	void OnRaceEnd();
 	
 	UFUNCTION(BlueprintCallable)
 	void OnDeceleration(const float TimeValue,const float DecelerationRateValue);
@@ -142,6 +147,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|EffectTags")
 	FName HitEffectTag = "Hit";
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|EffectTags")
+	FName VictoryEffectTag = "Victory";
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Deceleration")
 	float DecelerationDuration = 2.0f;
 
@@ -153,6 +161,16 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Twine")
 	float TwineDefaultQTETime = 3.0f;
+
+	// -- UI --
+
+	/** Game-over (lose) UI widget class. Triggered by OnHit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor|UI", meta = (ToolTip = "Game-over UI widget class, triggered by OnHit."))
+	TSubclassOf<UUserWidget> LoseScreenWidgetClass;
+
+	/** Victory UI widget class. Triggered by OnRaceEnd. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor|UI", meta = (ToolTip = "Victory UI widget class, triggered by OnRaceEnd."))
+	TSubclassOf<UUserWidget> VictoryScreenWidgetClass;
 
 #pragma endregion
 public:
