@@ -1,0 +1,10 @@
+逻辑在 AObstacle::OnHitPlayer（Source/GameJamAnchor/Private/Obstacle/Obstacle.cpp:156）里：
+
+  1. 只认玩家：判断碰撞对象是否带 Anchor.Player Tag。                                                       2. 冲刺击碎优先：如果 bBreakableByDash 且玩家正在冲刺，走 OnDashBroken（可播放断裂动画/销毁，由
+  bDestroyOnDashBreak 决定）。                                                                              3. 防止重复触发：如果 bApplyEffectOnce 为 true，第一次命中后标记
+  bEffectAlreadyApplied，后续同一玩家再蹭上来不再触发。
+  4. 通知 GameMode：调用 GameMode->ReportPlayerHitObstacle(this, EffectTag)，把本障碍和 EffectTag 广播给
+  Pawn 处理（减速/击退/伤害等具体效果由 Pawn 根据 Tag 决定）。
+  5. 命中效果：播放 HitSound / HitEffect，并触发蓝图事件 ReceiveOnHitPlayer。
+  6. 是否销毁：由障碍自己的 bDestroyOnHit 决定。如果为 true，播放销毁音效特效、触发 ReceiveOnDestroyed 后
+  Destroy()。

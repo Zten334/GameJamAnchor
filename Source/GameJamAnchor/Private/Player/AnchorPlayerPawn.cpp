@@ -131,12 +131,13 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 	}
 	else if (QTETime > 0.0f)
 	{
+		QTETime -= DeltaTime;
 		if (!FollowTargetActor)
 		{
 			return;
 		}
 		SetActorLocation(FVector(FollowTargetActor->GetActorLocation().X,0.f,FollowTargetActor->GetActorLocation().Z));
-		QTETime -= DeltaTime;
+		
 		/*
 		const float TwineForce = 0.5f;
 		FVector FinalDirection = FVector(0,0,1);
