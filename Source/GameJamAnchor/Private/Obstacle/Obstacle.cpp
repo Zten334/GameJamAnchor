@@ -32,6 +32,12 @@ AObstacle::AObstacle(const FObjectInitializer& ObjectInitializer)
 	FlipbookComponent->SetVisibility(false);
 	FlipbookComponent->SetHiddenInGame(true);
 
+	WarningSpriteComponent = CreateDefaultSubobject<UPaperSpriteComponent>(TEXT("WarningSpriteComponent"));
+	WarningSpriteComponent->SetupAttachment(RootScene);
+	WarningSpriteComponent->SetVisibility(false);
+	WarningSpriteComponent->SetHiddenInGame(true);
+	WarningSpriteComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
 	if (UPaperSprite* DefaultSprite = LoadObject<UPaperSprite>(nullptr, TEXT("/Engine/EditorResources/S_Actor")))
 	{
 		SpriteComponent->SetSprite(DefaultSprite);
@@ -127,6 +133,8 @@ void AObstacle::BeginPlay()
 		WanderTarget = SpawnLocation + FVector(FMath::Cos(Angle) * Radius, 0.0f, FMath::Sin(Angle) * Radius);
 		WanderTargetTimer = FMath::RandRange(0.5f, 1.5f);
 	}
+
+	UpdateWarningVisual();
 
 	UE_LOG(LogTemp, Log, TEXT("Obstacle %s spawned at %s (Dynamic=%d, OneWay=%d, Wander=%d, OneWaySpeed=%.1f, ScrollWithChunk=%d, SpriteCollision=%d, Effect=%s)."),
 		*GetName(), *SpawnLocation.ToString(), bDynamic, bOneWayMovement, bWanderInRadius, OneWaySpeed, bScrollWithChunk, bUseSpriteCollision, *EffectTag.ToString());
@@ -392,7 +400,29 @@ void AObstacle::ApplyVisualConfig()
 		VelocityX = SwaySpeed * FMath::Cos(SwayPhase);
 	}
 	UpdateVisualFacing(VelocityX >= 0.0f);
+	UpdateWarningVisual();
 
 	UE_LOG(LogTemp, Log, TEXT("Obstacle %s ApplyVisualConfig: BaseScale=%s, RelativeScale=%s, Mirror=%d, FaceRight=%d, InitialScaleX=%.2f."),
 		*GetName(), *BaseVisualScale3D.ToString(), *RelativeScale3D.ToString(), bMirrorX, bFaceRightByDefault, InitialVisualScaleX);
+}
+
+void AObstacle::UpdateWarningVisual()
+{
+	if (!WarningSpriteComponent)
+	{
+		return;
+	}
+
+	if (!bShowWarning || !WarningSprite)
+	{
+		WarningSpriteComponent->SetVisibility(false);
+		WarningSpriteComponent->SetHiddenInGame(true);
+		return;
+	}
+
+	WarningSpriteComponent->SetSprite(WarningSprite);
+	WarningSpriteComponent->SetRelativeLocation(WarningOffset);
+	WarningSpriteComponent->SetRelativeScale3D(FVector::OneVector * WarningSpriteScale);
+	WarningSpriteComponent->SetVisibility(true);
+	WarningSpriteComponent->SetHiddenInGame(false);
 }

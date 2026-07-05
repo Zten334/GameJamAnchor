@@ -149,6 +149,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Visual", meta = (ToolTip = "对 Sprite/Flipbook 组件的缩放倍数，默认 (1,1,1)。例如 (2,2,2) 放大一倍，(0.5,0.5,0.5) 缩小一半。"))
 	FVector RelativeScale3D = FVector::OneVector;
 
+	/** 是否显示悬浮警示图标。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Warning", meta = (ToolTip = "勾选后在障碍上方显示一个警示 Sprite，例如感叹号、危险标记等。"))
+	bool bShowWarning = false;
+
+	/** 警示图标使用的 PaperSprite。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Warning", meta = (ToolTip = "悬浮在障碍上方的警示图标 Sprite。"))
+	TObjectPtr<class UPaperSprite> WarningSprite = nullptr;
+
+	/** 警示图标相对障碍的位置偏移。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Warning", meta = (ToolTip = "警示图标相对障碍的位置偏移。默认 (0, 0, 50) 即在头顶 50 单位。Y 值可调整图层深度。"))
+	FVector WarningOffset = FVector(0.0f, 0.0f, 50.0f);
+
+	/** 警示图标的额外缩放。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Warning", meta = (ToolTip = "警示图标的缩放倍数，默认 1。"))
+	float WarningSpriteScale = 1.0f;
+
 	/** 由 Chunk 生成后调用，应用配置中的旋转/镜像/缩放等视觉设置。 */
 	void ApplyVisualConfig();
 
@@ -165,6 +181,10 @@ protected:
 	/** 障碍的 Flipbook 动画组件。设置了 Flipbook 资产后会自动启用。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Anchor Obstacle|Components", meta = (ToolTip = "障碍的 Flipbook 动画组件。在 Details 面板中指定 Flipbook 资产后，运行时会自动播放动画。"))
 	TObjectPtr<class UPaperFlipbookComponent> FlipbookComponent;
+
+	/** 悬浮警示图标组件。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Anchor Obstacle|Components", meta = (ToolTip = "悬浮在障碍上方的警示图标组件。"))
+	TObjectPtr<class UPaperSpriteComponent> WarningSpriteComponent;
 
 	float SwayPhase = 0.0f;
 
@@ -225,6 +245,9 @@ protected:
 
 	/** 根据移动方向水平翻转视觉组件（Sprite 或 Flipbook）。 */
 	void UpdateVisualFacing(bool bMovingRight);
+
+	/** 设置/刷新悬浮警示图标的可见性、位置、缩放和 Sprite。 */
+	void UpdateWarningVisual();
 
 	/** 检测碰撞对象是否正在冲刺。 */
 	bool IsPlayerDashing(AActor* Actor) const;

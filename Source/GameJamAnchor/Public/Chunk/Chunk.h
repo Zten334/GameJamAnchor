@@ -80,6 +80,22 @@ struct FObstacleSpawnConfig
 	/** 障碍生成后使用的 Flipbook 动画。会覆盖障碍默认的 Flipbook 设置。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Chunk", meta = (ToolTip = "为该障碍实例指定一个 PaperFlipbook 动画。设置后会自动应用到生成的障碍上。"))
 	TObjectPtr<class UPaperFlipbook> Flipbook = nullptr;
+
+	/** 是否显示悬浮警示图标。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Chunk", meta = (ToolTip = "勾选后在该障碍实例上方显示警示图标。"))
+	bool bShowWarning = false;
+
+	/** 警示图标使用的 PaperSprite。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Chunk", meta = (ToolTip = "该障碍实例使用的警示图标 Sprite。"))
+	TObjectPtr<class UPaperSprite> WarningSprite = nullptr;
+
+	/** 警示图标相对障碍的位置偏移。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Chunk", meta = (ToolTip = "警示图标相对障碍的位置偏移。默认 (0, 0, 50) 即在头顶 50 单位。Y 值可调整图层深度。"))
+	FVector WarningOffset = FVector(0.0f, 0.0f, 50.0f);
+
+	/** 警示图标的额外缩放。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Chunk", meta = (ToolTip = "警示图标的缩放倍数，默认 1。"))
+	float WarningSpriteScale = 1.0f;
 };
 
 /**

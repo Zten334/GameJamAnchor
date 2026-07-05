@@ -40,6 +40,12 @@ void AGameJamAnchorGameMode::ReportPlayerHitObstacle(AActor* Hitter, FName Effec
 	OnPlayerHitObstacle.Broadcast(Hitter, EffectTag);
 }
 
+void AGameJamAnchorGameMode::ReportPlayerReachedGoal()
+{
+	UE_LOG(LogTemp, Log, TEXT("GameMode: Player reached goal. Broadcasting victory event."));
+	OnAnchorPlayerReachedGoal.Broadcast();
+}
+
 AAnchorCamera* AGameJamAnchorGameMode::FindAnchorCamera() const
 {
 	TArray<AActor*> FoundCameras;
