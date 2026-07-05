@@ -4,7 +4,9 @@
 #include "Components/BoxComponent.h"
 #include "Framework/GameJamAnchorGameMode.h"
 #include "Chunk/ChunkManager.h"
+#include "Obstacle/Obstacle.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
 #include "Particles/ParticleSystem.h"
@@ -15,7 +17,7 @@ ATerminationZone::ATerminationZone(const FObjectInitializer& ObjectInitializer)
 	bDynamic = false;
 	bOneWayMovement = false;
 	bWanderInRadius = false;
-	bScrollWithChunk = true;
+	bScrollWithChunk = false;
 	bDestroyWithOwnerChunk = true;
 	bDestroyOnHit = false;
 	bApplyEffectOnce = true;
@@ -85,7 +87,16 @@ void ATerminationZone::TriggerGoalReached()
 		{
 			if (AChunkManager* Manager = Cast<AChunkManager>(ManagerActor))
 			{
-				Manager->SetActorTickEnabled(false);
+				Manager->StopScrolling();
+			}
+		}
+
+		for (TActorIterator<AObstacle> It(GetWorld()); It; ++It)
+		{
+			if (AObstacle* Obstacle = *It)
+			{
+				Obstacle->bScrollWithChunk = false;
+				Obstacle->ScrollSpeed = 0.0f;
 			}
 		}
 	}

@@ -23,8 +23,8 @@ class GAMEJAMANCHOR_API ATerminationZone : public AObstacle
 public:
 	ATerminationZone(const FObjectInitializer& ObjectInitializer);
 
-	/** 到达终点后是否停止 Chunk 滚动。 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Termination", meta = (ToolTip = "勾选后玩家进入终点区域时会停止场景滚动，常用于演出胜利动画。"))
+	/** 到达终点后是否停止场景滚动。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Termination", meta = (ToolTip = "勾选后玩家进入终点区域时会停止 ChunkManager 和所有障碍的滚动。"))
 	bool bStopChunkScrollOnReached = true;
 
 	/** 到达终点时播放的音效。 */
