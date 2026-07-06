@@ -164,7 +164,7 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 			EndTwine();
 			return;
 		}
-		SetActorLocation(FVector(FollowTargetActor->GetActorLocation().X,GetActorLocation().Y,FollowTargetActor->GetActorLocation().Z));
+		SetActorLocation(FVector(FollowTargetActor->GetActorLocation().X, FollowTargetActor->GetActorLocation().Y + 1.0f, FollowTargetActor->GetActorLocation().Z));
 
 		/*
 		const float TwineForce = 0.5f;
@@ -189,6 +189,13 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 		AddMovementInput(FinalDirection, SprintForce);
 	}
 	
+	else if (GetVelocity().IsNearlyZero())
+	{
+		// 玩家完全静止时，CharacterMovementComponent 可能把胶囊体从物理场景中“休眠”，
+		// 导致障碍 Sweep 检测不到阻挡而穿墙。给一个极微小、无感知的输入，
+		// 保持移动组件持续处于活跃模拟状态。
+		AddMovementInput(FVector(0.0f, 0.0f, -1.0f), 0.005f);
+	}
 	else if (FMath::IsNearlyZero(GetVelocity().Z))
 	{
 		if (GetActorLocation().Z > 1.f)
@@ -488,6 +495,15 @@ void AAnchorPlayerPawn::OnTwine(float QUEValue,AActor* TwinActor)
 {
 	FollowTargetActor = TwinActor;
 	QTETime += QUEValue;
+	PreTwineY = GetActorLocation().Y;
+
+	if (TwinActor)
+	{
+		// 被绑期间把 Pawn 放到捕获障碍前面（Y 更大 = 更靠近相机），防止被障碍 Sprite 盖住。
+		FVector Loc = GetActorLocation();
+		Loc.Y = TwinActor->GetActorLocation().Y + 1.0f;
+		SetActorLocation(Loc);
+	}
 }
 
 void AAnchorPlayerPawn::EndTwine()
@@ -499,6 +515,12 @@ void AAnchorPlayerPawn::EndTwine()
 	{
 		MoveComp->MaxFlySpeed = MaxSpeed;
 	}
+
+	// 恢复 Pawn 的原始 Y 深度。
+	FVector Loc = GetActorLocation();
+	Loc.Y = PreTwineY;
+	SetActorLocation(Loc);
+
 	UE_LOG(LogTemp, Log, TEXT("Pawn: Twine ended via struggle or target lost."));
 }
 

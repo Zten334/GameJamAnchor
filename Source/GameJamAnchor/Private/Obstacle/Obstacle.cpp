@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Obstacle/Obstacle.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "PaperSpriteComponent.h"
 #include "PaperSprite.h"
 #include "PaperFlipbookComponent.h"
@@ -271,7 +273,7 @@ void AObstacle::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (IsGameOver())
+	if (IsGameOver() || bDashBroken)
 	{
 		return;
 	}
@@ -354,26 +356,54 @@ void AObstacle::Tick(float DeltaTime)
 	{
 		const FCollisionShape Shape = BlockingComp->GetCollisionShape();
 		FCollisionQueryParams Params(NAME_None, false, this);
-		FHitResult SweepHit;
-		const bool bHit = GetWorld()->SweepSingleByProfile(
-			SweepHit,
-			OldLocation,
-			Location,
-			BlockingComp->GetComponentQuat(),
-			BlockingComp->GetCollisionProfileName(),
-			Shape,
-			Params);
 
-		if (bHit && SweepHit.IsValidBlockingHit())
+		// ── 分步 Sweep，防止薄障碍高速移动时穿透玩家 ──
+		// 单步移动距离不超过碰撞体最小尺寸的一半，确保每步都能命中薄物体。
+		const FVector Delta = Location - OldLocation;
+		const FVector ShapeExtent = Shape.GetExtent();
+		const float MinShapeExtent = FMath::Min3(ShapeExtent.X, ShapeExtent.Y, ShapeExtent.Z);
+		const float MaxStepDistance = FMath::Max(MinShapeExtent * 0.5f, 1.0f);
+		const float TotalDistance = Delta.Size();
+		const int32 Steps = FMath::Max(1, FMath::CeilToInt(TotalDistance / MaxStepDistance));
+
+		FVector StepStart = OldLocation;
+		for (int32 Step = 0; Step < Steps; ++Step)
 		{
-			Location = SweepHit.Location;
+			const FVector StepEnd = OldLocation + Delta * (static_cast<float>(Step + 1) / static_cast<float>(Steps));
+			FHitResult SweepHit;
+			const bool bHit = GetWorld()->SweepSingleByProfile(
+				SweepHit,
+				StepStart,
+				StepEnd,
+				BlockingComp->GetComponentQuat(),
+				BlockingComp->GetCollisionProfileName(),
+				Shape,
+				Params);
 
-			AActor* HitActor = SweepHit.GetActor();
-			if (IsPlayerActor(HitActor) && !OverlappedPlayers.Contains(HitActor))
+			if (bHit && SweepHit.IsValidBlockingHit())
 			{
-				OverlappedPlayers.Add(HitActor);
-				OnOverlapBegin(OverlapBox.Get(), HitActor, nullptr, 0, true, SweepHit);
+				Location = SweepHit.Location;
+
+				AActor* HitActor = SweepHit.GetActor();
+				if (IsPlayerActor(HitActor))
+				{
+					// 障碍命中玩家时，让玩家同步跟随障碍本帧的实际位移。
+					// 这样薄障碍向上“兜”玩家时，两者保持相对静止，避免玩家因 movement 响应滞后而穿透。
+					const FVector ActualDelta = Location - OldLocation;
+					FVector PlayerLoc = HitActor->GetActorLocation();
+					PlayerLoc += ActualDelta;
+					HitActor->SetActorLocation(PlayerLoc, false, nullptr, ETeleportType::TeleportPhysics);
+
+					if (!OverlappedPlayers.Contains(HitActor))
+					{
+						OverlappedPlayers.Add(HitActor);
+						OnOverlapBegin(OverlapBox.Get(), HitActor, nullptr, 0, true, SweepHit);
+					}
+				}
+				break;
 			}
+
+			StepStart = StepEnd;
 		}
 	}
 
@@ -422,6 +452,21 @@ void AObstacle::Tick(float DeltaTime)
 		{
 			OverlappedPlayers.Remove(Actor);
 			OnOverlapEnd(OverlapBox.Get(), Actor, nullptr, 0);
+		}
+	}
+
+	// ── 已在重叠区域内的玩家开始 Dash 时触发击碎 ──
+	// OnOverlapBegin 只在进入 OverlapBox 时触发；如果玩家已经靠在障碍上再 Dash，
+	// 不会收到新的进入事件，需要每帧补检当前重叠玩家是否处于 Dash 状态。
+	if (bBreakableByDash)
+	{
+		for (AActor* Player : OverlappedPlayers)
+		{
+			if (IsPlayerDashing(Player))
+			{
+				OnDashBroken();
+				return;
+			}
 		}
 	}
 }
@@ -523,6 +568,8 @@ void AObstacle::OnOverlapEnd(UPrimitiveComponent* OverlappedComponent, AActor* O
 
 void AObstacle::OnDashBroken()
 {
+	bDashBroken = true;
+
 	UE_LOG(LogTemp, Log, TEXT("Obstacle %s broken by dash."), *GetName());
 	ReceiveOnDashBroken();
 

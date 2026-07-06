@@ -232,6 +232,9 @@ protected:
 	/** 已存活时间。 */
 	float ElapsedLifeTime = 0.0f;
 
+	/** 是否已被冲刺击碎（防止多帧重复触发蓝图事件）。 */
+	bool bDashBroken = false;
+
 	/** 检查并执行生命周期 / 距离销毁。 */
 	void CheckDestroyConditions();
 

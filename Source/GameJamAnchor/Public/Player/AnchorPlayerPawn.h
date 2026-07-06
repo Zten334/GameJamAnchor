@@ -214,6 +214,9 @@ private:
 	float CurrentSwingAngle = 45.0f;
 	float SwingDir = -1.0f;
 
+	/** 进入 QTE/Twine 前 Pawn 的 Y 坐标，用于结束后恢复深度。 */
+	float PreTwineY = 0.0f;
+
 	/** 检测玩家是否完全离开可视区域。 */
 	void CheckOutOfBounds();
 };
