@@ -194,7 +194,7 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 		// 玩家完全静止时，CharacterMovementComponent 可能把胶囊体从物理场景中“休眠”，
 		// 导致障碍 Sweep 检测不到阻挡而穿墙。给一个极微小、无感知的输入，
 		// 保持移动组件持续处于活跃模拟状态。
-		AddMovementInput(FVector(0.0f, 0.0f, -1.0f), 0.005f);
+		AddMovementInput(FVector(0.0f, 0.0f, -1.0f), 0.1f);
 	}
 	else if (FMath::IsNearlyZero(GetVelocity().Z))
 	{
