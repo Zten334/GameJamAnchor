@@ -66,7 +66,8 @@ void AChunk::SpawnObstacles()
 			continue;
 		}
 
-		const FVector SpawnLocation = GetActorLocation() + Config.RelativeLocation;
+		const FVector ChunkLocation = GetActorLocation();
+		const FVector SpawnLocation = ChunkLocation + Config.RelativeLocation;
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
@@ -75,6 +76,10 @@ void AChunk::SpawnObstacles()
 		{
 			continue;
 		}
+
+		UE_LOG(LogTemp, Warning, TEXT("CHUNK_SPAWN %s: ChunkLoc=%s RelLoc=%s SpawnLoc=%s Obstacle=%s ObstacleLoc=%s ScrollWithChunk=%d"),
+			*GetName(), *ChunkLocation.ToString(), *Config.RelativeLocation.ToString(), *SpawnLocation.ToString(),
+			*NewObstacle->GetName(), *NewObstacle->GetActorLocation().ToString(), (int32)NewObstacle->bScrollWithChunk);
 
 		NewObstacle->ScrollSpeed = ScrollSpeed;
 		NewObstacle->InitialX = SpawnLocation.X;

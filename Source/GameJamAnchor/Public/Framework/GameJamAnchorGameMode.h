@@ -9,6 +9,7 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAnchorPlayerOutOfBounds);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAnchorPlayerHitObstacle, AActor*, Hitter, FName, EffectTag);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAnchorPlayerReachedGoal);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAnchorPlayerDied);
 
 UCLASS(Blueprintable)
 class GAMEJAMANCHOR_API AGameJamAnchorGameMode : public AGameModeBase
@@ -44,7 +45,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Anchor Events", meta = (ToolTip = "由终点区域调用，通知游戏玩家已到达终点。"))
 	void ReportPlayerReachedGoal();
 
+	/** 玩家死亡时触发（被障碍击杀、摔死等）。Pawn 调用 ReportPlayerDied 通知场景系统停止滚动。 */
+	UPROPERTY(BlueprintAssignable, Category = "Anchor Events", meta = (ToolTip = "玩家死亡时触发。由 Pawn 调用，用于停止场景滚动等全局处理。"))
+	FOnAnchorPlayerDied OnAnchorPlayerDied;
+
+	/** 由玩家 Pawn 调用，广播死亡事件。 */
+	UFUNCTION(BlueprintCallable, Category = "Anchor Events", meta = (ToolTip = "由玩家 Pawn 调用，通知场景系统玩家已死亡。"))
+	void ReportPlayerDied();
+
+	/** 返回游戏是否已经结束（死亡、出界或胜利）。 */
+	UFUNCTION(BlueprintPure, Category = "Anchor State", meta = (ToolTip = "游戏是否已经结束。"))
+	bool IsGameOver() const { return bIsGameOver; }
+
 protected:
+	/** 游戏是否已经结束。 */
+	UPROPERTY(BlueprintReadOnly, Category = "Anchor State")
+	bool bIsGameOver = false;
+
 	/** 关卡中放置的静态 2D 相机。GameMode 会在玩家加入后把视角切到该相机。 */
 	UFUNCTION(BlueprintPure, Category = "Anchor Camera", meta = (ToolTip = "查找关卡中放置的 AnchorCamera，玩家加入后会把视角切换到该相机。"))
 	class AAnchorCamera* FindAnchorCamera() const;

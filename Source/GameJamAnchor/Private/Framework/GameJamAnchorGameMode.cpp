@@ -26,6 +26,7 @@ void AGameJamAnchorGameMode::PostLogin(APlayerController* NewPlayer)
 void AGameJamAnchorGameMode::ReportAnchorPlayerOutOfBounds()
 {
 	UE_LOG(LogTemp, Log, TEXT("GameMode: Player out of bounds. Broadcasting failure event."));
+	bIsGameOver = true;
 	OnAnchorPlayerOutOfBounds.Broadcast();
 }
 
@@ -43,7 +44,15 @@ void AGameJamAnchorGameMode::ReportPlayerHitObstacle(AActor* Hitter, FName Effec
 void AGameJamAnchorGameMode::ReportPlayerReachedGoal()
 {
 	UE_LOG(LogTemp, Log, TEXT("GameMode: Player reached goal. Broadcasting victory event."));
+	bIsGameOver = true;
 	OnAnchorPlayerReachedGoal.Broadcast();
+}
+
+void AGameJamAnchorGameMode::ReportPlayerDied()
+{
+	UE_LOG(LogTemp, Log, TEXT("GameMode: Player died. Broadcasting death event."));
+	bIsGameOver = true;
+	OnAnchorPlayerDied.Broadcast();
 }
 
 AAnchorCamera* AGameJamAnchorGameMode::FindAnchorCamera() const

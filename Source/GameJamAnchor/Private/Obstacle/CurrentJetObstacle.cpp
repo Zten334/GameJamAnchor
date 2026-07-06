@@ -51,6 +51,11 @@ void ACurrentJetObstacle::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	if (IsGameOver())
+	{
+		return;
+	}
+
 	if (bIsJetting)
 	{
 		ApplyCurrentToOverlappingPlayers(DeltaTime);

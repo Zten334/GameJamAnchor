@@ -17,7 +17,7 @@ ATerminationZone::ATerminationZone(const FObjectInitializer& ObjectInitializer)
 	bDynamic = false;
 	bOneWayMovement = false;
 	bWanderInRadius = false;
-	bScrollWithChunk = false;
+	bScrollWithChunk = true;
 	bDestroyWithOwnerChunk = true;
 	bDestroyOnHit = false;
 	bApplyEffectOnce = true;
@@ -65,6 +65,14 @@ void ATerminationZone::OnGoalBeginOverlap(UPrimitiveComponent* OverlappedCompone
 	if (bGoalReached || !IsPlayerActor(OtherActor))
 	{
 		return;
+	}
+
+	if (AGameJamAnchorGameMode* GameMode = Cast<AGameJamAnchorGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		if (GameMode->IsGameOver())
+		{
+			return;
+		}
 	}
 
 	TriggerGoalReached();

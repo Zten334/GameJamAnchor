@@ -121,6 +121,12 @@ protected:
 	UFUNCTION(BlueprintCallable)
 	void OnTwine(float QUEValue,AActor* TwinActor);
 
+		/** 结束 QTE/Twine 状态，恢复移动。 */
+		void EndTwine();
+
+	/** 禁用玩家输入与移动，用于死亡或胜利后。 */
+	void DisablePlayerControl();
+
 	// ── IAnchorPlayerInterface 实现 ──
 
 	virtual bool IsDashing_Implementation() const override;
@@ -160,7 +166,7 @@ protected:
 	float WindStrength = 200.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Twine")
-	float TwineDefaultQTETime = 3.0f;
+	float TwineDefaultQTETime = 2.0f;
 
 	// -- UI --
 
@@ -186,15 +192,28 @@ public:
 	TWeakObjectPtr<AActor> FollowTargetActor;
 	
 	UPROPERTY(BlueprintReadWrite, Category = "Anchor|QTE")
-	bool canSprint ;
+	bool canSprint;
+
+	/** 是否已经死亡或到达终点，游戏已结束。 */
+	UPROPERTY(BlueprintReadOnly, Category = "Anchor|State")
+	bool bIsGameOver = false;
+
+	/** 视口半宽（游戏区域 X 方向边界）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor|Bounds")
+	float ViewportHalfWidth = 90.0f;
+
+	/** 视口半高（游戏区域 Z 方向边界）。 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor|Bounds")
+	float ViewportHalfHeight = 160.0f;
+
 private:
 	FVector VelocityBeforeHanged;
 	bool isSprinting = false;
-	
-	
+
+
 	float CurrentSwingAngle = 45.0f;
 	float SwingDir = -1.0f;
-	
-	
-	
+
+	/** 检测玩家是否完全离开可视区域。 */
+	void CheckOutOfBounds();
 };

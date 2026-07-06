@@ -109,22 +109,67 @@ void AObstacle::BeginPlay()
 	Super::BeginPlay();
 	SpawnLocation = GetActorLocation();
 
-	UPrimitiveComponent* HitComponent = CollisionBox.Get();
-	if (bUseSpriteCollision && SpriteComponent)
+	UE_LOG(LogTemp, Warning, TEXT("OBSTACLE_BEGINPLAY %s: Loc=%s SpawnLoc=%s bScrollWithChunk=%d"),
+		*GetName(), *GetActorLocation().ToString(), *SpawnLocation.ToString(), (int32)bScrollWithChunk);
+
+	// 记录蓝图里手动调整的 CollisionBox 尺寸，作为非 Sprite 碰撞模式下的缩放基准。
+	if (CollisionBox)
 	{
-		SpriteComponent->SetCollisionProfileName(UCollisionProfile::BlockAllDynamic_ProfileName);
-		SpriteComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		SpriteComponent->SetGenerateOverlapEvents(true);
+		BaseCollisionExtent = CollisionBox->GetUnscaledBoxExtent();
+	}
 
-		// 保留 CollisionBox 作为 Sweep 阻挡体；Sprite 碰撞负责精确的 Overlap/Hit 检测。
-		// 不关闭 CollisionBox，否则 SetActorLocation 的 Sweep 没有可用碰撞形状。
-		if (CollisionBox)
+	UPrimitiveComponent* HitComponent = CollisionBox.Get();
+
+	// 强制关闭所有视觉/碰撞组件的物理模拟，防止蓝图中误开 Simulate Physics 导致障碍下落。
+	auto DisablePhysics = [](UPrimitiveComponent* Comp)
+	{
+		if (!Comp)
 		{
-			CollisionBox->SetCollisionProfileName(UCollisionProfile::BlockAllDynamic_ProfileName);
-			CollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			return;
 		}
+		Comp->SetSimulatePhysics(false);
+		Comp->SetEnableGravity(false);
+	};
+	DisablePhysics(CollisionBox.Get());
+	DisablePhysics(OverlapBox.Get());
+	DisablePhysics(SpriteComponent.Get());
+	DisablePhysics(FlipbookComponent.Get());
+	DisablePhysics(WarningSpriteComponent.Get());
 
-		HitComponent = SpriteComponent.Get();
+	// 强制重置所有碰撞组件的 Profile，覆盖蓝图中可能保存的缺失/Custom profile。
+	if (CollisionBox)
+	{
+		CollisionBox->SetCollisionProfileName(UCollisionProfile::BlockAllDynamic_ProfileName);
+		CollisionBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		CollisionBox->SetGenerateOverlapEvents(true);
+	}
+	if (OverlapBox)
+	{
+		OverlapBox->SetCollisionProfileName(FName("OverlapAllDynamic"));
+		OverlapBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		OverlapBox->SetGenerateOverlapEvents(true);
+	}
+	if (SpriteComponent)
+	{
+		if (bUseSpriteCollision)
+		{
+			SpriteComponent->SetCollisionProfileName(UCollisionProfile::BlockAllDynamic_ProfileName);
+			SpriteComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			SpriteComponent->SetGenerateOverlapEvents(true);
+			HitComponent = SpriteComponent.Get();
+		}
+		else
+		{
+			SpriteComponent->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+			SpriteComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			SpriteComponent->SetGenerateOverlapEvents(false);
+		}
+	}
+	if (WarningSpriteComponent)
+	{
+		WarningSpriteComponent->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+		WarningSpriteComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		WarningSpriteComponent->SetGenerateOverlapEvents(false);
 	}
 
 	if (HitComponent)
@@ -225,6 +270,11 @@ void AObstacle::BeginPlay()
 void AObstacle::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	if (IsGameOver())
+	{
+		return;
+	}
 
 	ElapsedLifeTime += DeltaTime;
 	CheckDestroyConditions();
@@ -329,6 +379,13 @@ void AObstacle::Tick(float DeltaTime)
 
 	SetActorLocation(Location, false);
 
+	// 若本次移动触发了游戏结束（死亡/胜利），立即回退本帧位移，确保场景彻底冻结。
+	if (IsGameOver())
+	{
+		SetActorLocation(OldLocation, false);
+		return;
+	}
+
 	// ── 手动 Overlap 检测 ──
 	// 处理 Sweep 没拦到的低速/静止重叠情况（如玩家主动走进障碍）。
 	// 开局 0.3 秒内跳过检测，防止出生时与玩家重叠误触发
@@ -364,7 +421,7 @@ void AObstacle::Tick(float DeltaTime)
 		for (AActor* Actor : ToRemove)
 		{
 			OverlappedPlayers.Remove(Actor);
-			bEffectAlreadyApplied = false;
+			OnOverlapEnd(OverlapBox.Get(), Actor, nullptr, 0);
 		}
 	}
 }
@@ -386,7 +443,7 @@ void AObstacle::CheckDestroyConditions()
 
 void AObstacle::OnHitPlayer(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
-	if (!IsPlayerActor(OtherActor))
+	if (IsGameOver() || !IsPlayerActor(OtherActor))
 	{
 		return;
 	}
@@ -397,12 +454,12 @@ void AObstacle::OnHitPlayer(UPrimitiveComponent* HitComponent, AActor* OtherActo
 		return;
 	}
 
-	if (bApplyEffectOnce && bEffectAlreadyApplied)
+	if (bApplyEffectOnce && AlreadyAffectedPlayers.Contains(OtherActor))
 	{
 		return;
 	}
 
-	bEffectAlreadyApplied = true;
+	AlreadyAffectedPlayers.Add(OtherActor);
 
 	if (AGameJamAnchorGameMode* GameMode = Cast<AGameJamAnchorGameMode>(GetWorld()->GetAuthGameMode()))
 	{
@@ -422,7 +479,7 @@ void AObstacle::OnHitPlayer(UPrimitiveComponent* HitComponent, AActor* OtherActo
 
 void AObstacle::OnOverlapBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (!IsPlayerActor(OtherActor))
+	if (IsGameOver() || !IsPlayerActor(OtherActor))
 	{
 		return;
 	}
@@ -433,12 +490,12 @@ void AObstacle::OnOverlapBegin(UPrimitiveComponent* OverlappedComponent, AActor*
 		return;
 	}
 
-	if (bApplyEffectOnce && bEffectAlreadyApplied)
+	if (bApplyEffectOnce && AlreadyAffectedPlayers.Contains(OtherActor))
 	{
 		return;
 	}
 
-	bEffectAlreadyApplied = true;
+	AlreadyAffectedPlayers.Add(OtherActor);
 
 	if (AGameJamAnchorGameMode* GameMode = Cast<AGameJamAnchorGameMode>(GetWorld()->GetAuthGameMode()))
 	{
@@ -460,7 +517,7 @@ void AObstacle::OnOverlapEnd(UPrimitiveComponent* OverlappedComponent, AActor* O
 {
 	if (IsPlayerActor(OtherActor))
 	{
-		bEffectAlreadyApplied = false;
+		OverlappedPlayers.Remove(OtherActor);
 	}
 }
 
@@ -486,6 +543,20 @@ void AObstacle::OnDashBroken()
 			SpriteComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		}
 	}
+}
+
+void AObstacle::Freeze()
+{
+	bScrollWithChunk = false;
+	ScrollSpeed = 0.0f;
+	bDynamic = false;
+	bOneWayMovement = false;
+	bWanderInRadius = false;
+	OneWaySpeed = 0.0f;
+	SwaySpeed = 0.0f;
+	WanderSpeed = 0.0f;
+
+	UE_LOG(LogTemp, Log, TEXT("Obstacle %s frozen."), *GetName());
 }
 
 void AObstacle::PlayHitEffects()
@@ -543,6 +614,15 @@ bool AObstacle::IsPlayerActor(AActor* Actor) const
 	}
 
 	return Actor->ActorHasTag(FName(TEXT("Anchor.Player")));
+}
+
+bool AObstacle::IsGameOver() const
+{
+	if (const AGameJamAnchorGameMode* GameMode = Cast<AGameJamAnchorGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		return GameMode->IsGameOver();
+	}
+	return false;
 }
 
 void AObstacle::UpdateVisualFacing(bool bMovingRight)
@@ -604,7 +684,7 @@ void AObstacle::ApplyVisualConfig()
 	UpdateVisualFacing(VelocityX >= 0.0f);
 	UpdateWarningVisual();
 
-	// 视觉缩放变更后同步更新 CollisionBox（仅 Sprite 碰撞模式）与 OverlapBox
+	// 视觉缩放变更后同步更新 CollisionBox 与 OverlapBox
 	{
 		FVector NewExtent(50.0f, 10.0f, 50.0f);
 		UPaperSprite* RefSprite = nullptr;
@@ -631,9 +711,19 @@ void AObstacle::ApplyVisualConfig()
 			NewExtent = FVector(WorldX, 10.0f, WorldZ);
 		}
 
-		if (CollisionBox && bUseSpriteCollision)
+		// 视觉缩放变更后同步更新 CollisionBox 与 OverlapBox。
+		// - 使用 Sprite 碰撞时：CollisionBox 按 Sprite/Flipbook 尺寸生成，作为 Sweep 近似体。
+		// - 不使用 Sprite 碰撞时：CollisionBox 保留蓝图手动调整的尺寸，并按 RelativeScale3D 缩放。
+		if (CollisionBox)
 		{
-			CollisionBox->SetBoxExtent(NewExtent);
+			if (bUseSpriteCollision)
+			{
+				CollisionBox->SetBoxExtent(NewExtent);
+			}
+			else
+			{
+				CollisionBox->SetBoxExtent(BaseCollisionExtent * RelativeScale3D);
+			}
 		}
 		if (OverlapBox)
 		{

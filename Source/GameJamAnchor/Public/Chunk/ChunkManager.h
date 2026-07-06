@@ -60,6 +60,9 @@ protected:
 	UFUNCTION()
 	void OnPlayerOutOfBounds();
 
+	UFUNCTION()
+	void OnPlayerDied();
+
 	bool bIsScrolling = true;
 
 	/** 教学关/引导阶段使用的固定 Chunk 序列。按数组顺序生成，耗尽后才进入随机生成。 */

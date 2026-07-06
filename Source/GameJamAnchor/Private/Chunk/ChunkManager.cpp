@@ -21,6 +21,7 @@ void AChunkManager::BeginPlay()
 	if (AGameJamAnchorGameMode* GameMode = Cast<AGameJamAnchorGameMode>(GetWorld()->GetAuthGameMode()))
 	{
 		GameMode->OnAnchorPlayerOutOfBounds.AddDynamic(this, &AChunkManager::OnPlayerOutOfBounds);
+		GameMode->OnAnchorPlayerDied.AddDynamic(this, &AChunkManager::OnPlayerDied);
 	}
 
 	SpawnInitialChunks();
@@ -29,6 +30,18 @@ void AChunkManager::BeginPlay()
 void AChunkManager::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	if (AGameJamAnchorGameMode* GameMode = Cast<AGameJamAnchorGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		if (GameMode->IsGameOver())
+		{
+			if (bIsScrolling)
+			{
+				StopScrolling();
+			}
+			return;
+		}
+	}
 
 	if (!bIsScrolling)
 	{
@@ -44,9 +57,14 @@ void AChunkManager::Tick(float DeltaTime)
 
 void AChunkManager::OnPlayerOutOfBounds()
 {
-	bIsScrolling = false;
-	SetActorTickEnabled(false);
+	StopScrolling();
 	UE_LOG(LogTemp, Log, TEXT("ChunkManager: Player out of bounds, stopping chunk scroll."));
+}
+
+void AChunkManager::OnPlayerDied()
+{
+	StopScrolling();
+	UE_LOG(LogTemp, Log, TEXT("ChunkManager: Player died, stopping chunk scroll."));
 }
 
 void AChunkManager::SpawnInitialChunks()
@@ -119,6 +137,14 @@ void AChunkManager::SpawnChunkAtCenterZ(float CenterZ, TSubclassOf<AChunk> Class
 
 void AChunkManager::UpdateChunkPositions(float DeltaTime)
 {
+	if (AGameJamAnchorGameMode* GameMode = Cast<AGameJamAnchorGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		if (GameMode->IsGameOver())
+		{
+			return;
+		}
+	}
+
 	const float DeltaZ = ScrollSpeed * DeltaTime;
 	for (AChunk* Chunk : ActiveChunks)
 	{
@@ -312,8 +338,8 @@ void AChunkManager::StopScrolling()
 	{
 		if (AObstacle* Obstacle = *It)
 		{
-			Obstacle->bScrollWithChunk = false;
-			Obstacle->ScrollSpeed = 0.0f;
+			Obstacle->Freeze();
+			Obstacle->SetActorTickEnabled(false);
 		}
 	}
 

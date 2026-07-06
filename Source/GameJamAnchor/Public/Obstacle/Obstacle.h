@@ -94,7 +94,7 @@ public:
 
 	/** OverlapBox 在视觉组件包围盒基础上的额外扩展量（世界单位）。X/Y/Z 分别对应包围盒的 X/Y/Z 方向。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Collision", meta = (ToolTip = "OverlapBox 在 Sprite/Flipbook 渲染包围盒基础上的额外扩展量。例如 (20, 0, 20) 表示 XZ 方向各扩大 20 单位，Y 方向不变。"))
-	FVector OverlapBoxPadding = FVector(20.0f, 0.0f, 20.0f);
+	FVector OverlapBoxPadding = FVector(0.0f, 0.0f, 0.0f);
 
 	/** Overlap 推力强度（世界单位/秒）。玩家进入 OverlapBox 后被向外推的基准速度。方向始终从障碍中心指向玩家，不会产生反向拉力。 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Anchor Obstacle|Collision", meta = (ToolTip = "玩家进入 OverlapBox 后被向外推的基准速度（世界单位/秒）。推力方向始终从障碍中心指向玩家（向外），不会因障碍移动方向而产生反向拉力。值越大推开越快。"))
@@ -182,6 +182,9 @@ public:
 	/** 供外部（玩家 Pawn 等）读取 CollisionBox 做碰撞检测。 */
 	UBoxComponent* GetCollisionBox() const;
 
+	/** 冻结障碍：停止滚动、动态摆动、单向移动、随机游动等所有运动。 */
+	void Freeze();
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Anchor Obstacle|Components", meta = (ToolTip = "根场景组件。"))
 	TObjectPtr<class USceneComponent> RootScene;
@@ -220,6 +223,9 @@ protected:
 	/** 视觉组件蓝图原有缩放，用于外部配置覆盖后恢复基准。 */
 	FVector BaseVisualScale3D = FVector::OneVector;
 
+	/** 蓝图里手动调整的 CollisionBox 原始尺寸，用于非 Sprite 碰撞模式下按 RelativeScale3D 缩放。 */
+	FVector BaseCollisionExtent = FVector(32.0f, 32.0f, 32.0f);
+
 	/** 出生点位置。 */
 	FVector SpawnLocation = FVector::ZeroVector;
 
@@ -237,15 +243,16 @@ protected:
 	UFUNCTION()
 	void OnOverlapBegin(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
-	/** OverlapBox 结束重叠时的回调。用于重置一次性效果标记。 */
+	/** OverlapBox 结束重叠时的回调。 */
 	UFUNCTION()
 	void OnOverlapEnd(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
 	/** 判断碰撞对象是否是玩家 Pawn（通过 Tag "Anchor.Player"）。 */
 	bool IsPlayerActor(AActor* Actor) const;
 
-	/** 是否已经对当前玩家触发过效果。 */
-	bool bEffectAlreadyApplied = false;
+	/** 已经对本障碍触发过效果的玩家集合（用于 bApplyEffectOnce）。 */
+	UPROPERTY()
+	TSet<TObjectPtr<AActor>> AlreadyAffectedPlayers;
 
 	/** 当前处于 OverlapBox 内的玩家集合（手动追踪，不依赖物理事件）。 */
 	UPROPERTY()
@@ -280,4 +287,7 @@ protected:
 
 	/** 检测碰撞对象是否正在冲刺。 */
 	bool IsPlayerDashing(AActor* Actor) const;
+
+	/** 判断游戏是否已结束（死亡/出界/胜利）。 */
+	bool IsGameOver() const;
 };

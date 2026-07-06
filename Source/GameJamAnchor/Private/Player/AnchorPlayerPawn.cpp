@@ -109,6 +109,25 @@ void AAnchorPlayerPawn::BeginPlay()
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (!PC) return;
 
+	// 重置状态，防止死亡/重生后遗留 QTE、悬挂或输入模式异常。
+	bIsGameOver = false;
+	QTETime = 0.0f;
+	isHanging = false;
+	FollowTargetActor = nullptr;
+	canSprint = true;
+	isSprinting = false;
+	CurrentSwingAngle = 45.0f;
+	SwingDir = -1.0f;
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->MaxFlySpeed = MaxSpeed;
+	}
+
+	// 恢复游戏输入（死亡 UI 可能把输入模式切成了 UIOnly）
+	PC->SetShowMouseCursor(false);
+	PC->SetInputMode(FInputModeGameOnly());
+	EnableInput(PC);
+
 	// ── 玩家 Tag，供 AObstacle::IsPlayerActor 识别 ──
 	Tags.Add(FName(TEXT("Anchor.Player")));
 
@@ -124,6 +143,13 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	if (bIsGameOver)
+	{
+		return;
+	}
+
+	CheckOutOfBounds();
+
 	UpdateDirectionIndicator();
 
 	//UE_LOG(LogTemp, Warning, TEXT("%f"),GetVelocity().Length());
@@ -133,13 +159,13 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 	}
 	else if (QTETime > 0.0f)
 	{
-		QTETime -= DeltaTime;
 		if (!FollowTargetActor.IsValid())
 		{
+			EndTwine();
 			return;
 		}
 		SetActorLocation(FVector(FollowTargetActor->GetActorLocation().X,GetActorLocation().Y,FollowTargetActor->GetActorLocation().Z));
-		
+
 		/*
 		const float TwineForce = 0.5f;
 		FVector FinalDirection = FVector(0,0,1);
@@ -152,7 +178,7 @@ void AAnchorPlayerPawn::Tick(float DeltaTime)
 			FinalDirection.X = 1.0f;
 		}
 		AddMovementInput(FinalDirection, TwineForce);
-		
+
 		*/
 	}
 	
@@ -278,9 +304,19 @@ void AAnchorPlayerPawn::DoSprintOnGoing(const FInputActionValue& InputActionValu
 
 void AAnchorPlayerPawn::DoStruggle(const FInputActionValue& InputActionValue)
 {
-	//减少QTE时间
+	if (QTETime <= 0.0f)
+	{
+		return;
+	}
+
+	// 不再每帧自动减时间；只有玩家主动挣扎才减少。
 	QTETime -= 0.3f;
-	QTETime =  FMath::Max(0.0f, QTETime);
+	QTETime = FMath::Max(0.0f, QTETime);
+
+	if (QTETime <= 0.0f)
+	{
+		EndTwine();
+	}
 }
 
 void AAnchorPlayerPawn::OnBreakAway()
@@ -313,7 +349,21 @@ void AAnchorPlayerPawn::DoDecelation(const FInputActionValue& InputActionValue)
 
 void AAnchorPlayerPawn::OnHit()
 {
+	if (bIsGameOver)
+	{
+		return;
+	}
+	bIsGameOver = true;
+
 	UE_LOG(LogTemp, Log, TEXT("Pawn: OnHit - creating game-over UI."));
+
+	// 通知 GameMode 玩家已死亡，停止场景滚动。
+	if (AGameJamAnchorGameMode* GameMode = Cast<AGameJamAnchorGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		GameMode->ReportPlayerDied();
+	}
+
+	DisablePlayerControl();
 
 	if (!LoseScreenWidgetClass)
 	{
@@ -342,7 +392,15 @@ void AAnchorPlayerPawn::OnHit()
 
 void AAnchorPlayerPawn::OnRaceEnd()
 {
+	if (bIsGameOver)
+	{
+		return;
+	}
+	bIsGameOver = true;
+
 	UE_LOG(LogTemp, Log, TEXT("Pawn: OnRaceEnd - creating victory UI."));
+
+	DisablePlayerControl();
 
 	if (!VictoryScreenWidgetClass)
 	{
@@ -367,6 +425,23 @@ void AAnchorPlayerPawn::OnRaceEnd()
 
 		UE_LOG(LogTemp, Log, TEXT("Pawn: Victory UI added to viewport."));
 	}
+}
+
+void AAnchorPlayerPawn::DisablePlayerControl()
+{
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		DisableInput(PC);
+	}
+
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->DisableMovement();
+		MoveComp->StopMovementImmediately();
+		MoveComp->Velocity = FVector::ZeroVector;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Pawn %s: player control disabled."), *GetName());
 }
 
 void AAnchorPlayerPawn::OnDeceleration(const float TimeValue,const float DecelerationRateValue)
@@ -415,11 +490,23 @@ void AAnchorPlayerPawn::OnTwine(float QUEValue,AActor* TwinActor)
 	QTETime += QUEValue;
 }
 
+void AAnchorPlayerPawn::EndTwine()
+{
+	QTETime = 0.0f;
+	FollowTargetActor = nullptr;
+	isHanging = false;
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->MaxFlySpeed = MaxSpeed;
+	}
+	UE_LOG(LogTemp, Log, TEXT("Pawn: Twine ended via struggle or target lost."));
+}
+
 // ── 障碍 EffectTag 路由 ──
 
 void AAnchorPlayerPawn::OnObstacleHitPlayer(AActor* Hitter, FName EffectTag)
 {
-	if (!Hitter)
+	if (!Hitter || bIsGameOver)
 	{
 		return;
 	}
@@ -500,6 +587,44 @@ void AAnchorPlayerPawn::UpdateDirectionIndicator()
 	const float ClampedAngle = FMath::Clamp(Angle, IndicatorMinAngle, IndicatorMaxAngle);
 
 	DirectionIndicator->SetRelativeRotation(FRotator(ClampedAngle, 0.0f, 0.0f));
+}
+
+void AAnchorPlayerPawn::CheckOutOfBounds()
+{
+	if (bIsGameOver)
+	{
+		return;
+	}
+
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	if (!Capsule)
+	{
+		return;
+	}
+
+	const FVector Loc = GetActorLocation();
+	const float Radius = Capsule->GetScaledCapsuleRadius();
+	const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+
+	const bool bOutOfBounds =
+		(Loc.X + Radius < -ViewportHalfWidth) ||
+		(Loc.X - Radius > ViewportHalfWidth) ||
+		(Loc.Z + HalfHeight < -ViewportHalfHeight) ||
+		(Loc.Z - HalfHeight > ViewportHalfHeight);
+
+	if (!bOutOfBounds)
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Pawn: out of bounds at %s. Game over."), *Loc.ToString());
+
+	if (AGameJamAnchorGameMode* GameMode = Cast<AGameJamAnchorGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		GameMode->ReportAnchorPlayerOutOfBounds();
+	}
+
+	OnHit();
 }
 
 
